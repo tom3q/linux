@@ -151,6 +151,203 @@ struct drm_exynos_g2d_exec {
 	__u64					async;
 };
 
+enum g3d_register {
+	/*
+	 * Protected registers
+	 */
+
+	FGPF_FRONTST,
+	FGPF_DEPTHT,
+	FGPF_DBMSK,
+	FGPF_FBCTL,
+	FGPF_DBADDR,
+	FGPF_CBADDR,
+	FGPF_FBW,
+
+	G3D_NUM_PROT_REGISTERS,
+
+	/*
+	 * Public registers
+	 */
+
+	/* Host interface */
+	FGHI_ATTRIB0 = G3D_NUM_PROT_REGISTERS,
+	FGHI_ATTRIB1,
+	FGHI_ATTRIB2,
+	FGHI_ATTRIB3,
+	FGHI_ATTRIB4,
+	FGHI_ATTRIB5,
+	FGHI_ATTRIB6,
+	FGHI_ATTRIB7,
+	FGHI_ATTRIB8,
+	FGHI_ATTRIB9,
+	FGHI_ATTRIB_VBCTRL0,
+	FGHI_ATTRIB_VBCTRL1,
+	FGHI_ATTRIB_VBCTRL2,
+	FGHI_ATTRIB_VBCTRL3,
+	FGHI_ATTRIB_VBCTRL4,
+	FGHI_ATTRIB_VBCTRL5,
+	FGHI_ATTRIB_VBCTRL6,
+	FGHI_ATTRIB_VBCTRL7,
+	FGHI_ATTRIB_VBCTRL8,
+	FGHI_ATTRIB_VBCTRL9,
+	FGHI_ATTRIB_VBBASE0,
+	FGHI_ATTRIB_VBBASE1,
+	FGHI_ATTRIB_VBBASE2,
+	FGHI_ATTRIB_VBBASE3,
+	FGHI_ATTRIB_VBBASE4,
+	FGHI_ATTRIB_VBBASE5,
+	FGHI_ATTRIB_VBBASE6,
+	FGHI_ATTRIB_VBBASE7,
+	FGHI_ATTRIB_VBBASE8,
+	FGHI_ATTRIB_VBBASE9,
+
+	/* Primitive engine */
+	FGPE_VERTEX_CONTEXT,
+	FGPE_VIEWPORT_OX,
+	FGPE_VIEWPORT_OY,
+	FGPE_VIEWPORT_HALF_PX,
+	FGPE_VIEWPORT_HALF_PY,
+	FGPE_DEPTHRANGE_HALF_F_SUB_N,
+	FGPE_DEPTHRANGE_HALF_F_ADD_N,
+
+	/* Raster engine */
+	FGRA_PIX_SAMP,
+	FGRA_D_OFF_EN,
+	FGRA_D_OFF_FACTOR,
+	FGRA_D_OFF_UNITS,
+	FGRA_BFCULL,
+	FGRA_YCLIP,
+	FGRA_LODCTL,
+	FGRA_XCLIP,
+	FGRA_PWIDTH,
+	FGRA_PSIZE_MIN,
+	FGRA_PSIZE_MAX,
+	FGRA_COORDREPLACE,
+	FGRA_LWIDTH,
+
+	/* Per-fragment unit */
+	FGPF_ALPHAT,
+	FGPF_BACKST,
+	FGPF_CCLR,
+	FGPF_BLEND,
+	FGPF_LOGOP,
+	FGPF_CBMSK,
+
+	G3D_NUM_REGISTERS
+};
+
+enum g3d_request_id {
+	G3D_REQUEST_REGISTER_WRITE,
+	G3D_REQUEST_SHADER_PROGRAM,
+	G3D_REQUEST_SHADER_DATA,
+	G3D_REQUEST_TEXTURE,
+	G3D_REQUEST_COLORBUFFER,
+	G3D_REQUEST_DEPTHBUFFER,
+	G3D_REQUEST_DRAW,
+
+	G3D_NUM_REQUESTS
+};
+
+enum g3d_shader_type {
+	G3D_SHADER_VERTEX,
+	G3D_SHADER_PIXEL,
+
+	G3D_NUM_SHADERS
+};
+
+enum g3d_shader_data_type {
+	G3D_SHADER_DATA_FLOAT,
+	G3D_SHADER_DATA_INT,
+	G3D_SHADER_DATA_BOOL,
+
+	G3D_NUM_SHADER_DATA_TYPES
+};
+
+struct g3d_state_entry {
+	__u32 reg;
+	__u32 val;
+};
+
+#define G3D_NUM_MIPMAPS		11
+#define G3D_TEXTURE_DIRTY	(1 << 0)
+#define G3D_TEXTURE_DETACH	(1 << 1)
+
+struct g3d_req_texture_setup {
+	__u32 control;
+	__u32 width;
+	__u32 height;
+	__u32 depth;
+	__u32 offset[G3D_NUM_MIPMAPS];
+	__u32 min_level;
+	__u32 max_level;
+	__u32 base_offset;
+	__u32 handle;
+	__u32 flags;
+};
+
+#define G3D_CBUFFER_DIRTY	(1 << 0)
+#define G3D_CBUFFER_DETACH	(1 << 1)
+
+struct g3d_req_colorbuffer_setup {
+	__u32 fbctl;
+	__u32 offset;
+	__u32 width;
+	__u32 handle;
+	__u32 flags;
+};
+
+#define G3D_DBUFFER_DIRTY	(1 << 0)
+#define G3D_DBUFFER_DETACH	(1 << 1)
+
+struct g3d_req_depthbuffer_setup {
+	__u32 offset;
+	__u32 handle;
+	__u32 flags;
+};
+
+struct g3d_req_draw_buffer {
+	__u32 vertices;
+	__u32 handle;
+	__u32 offset;
+	__u32 length;
+};
+
+struct g3d_req_shader_program {
+	__u32 unit_nattrib;
+	__u32 dcount[2];
+	__u32 handle;
+	__u32 offset;
+	__u32 length;
+};
+
+struct g3d_req_shader_data {
+	__u32 unit_type_offs;
+	__u32 data[];
+};
+
+struct drm_exynos_g3d_submit {
+	__u32 handle;
+	__u32 offset;
+	__u32 length;
+	__u32 fence;
+};
+
+/* timeouts are specified in clock-monotonic absolute times (to simplify
+ * restarting interrupted ioctls).  The following struct is logically the
+ * same as 'struct timespec' but 32/64b ABI safe.
+ */
+struct drm_exynos_timespec {
+	int64_t tv_sec;          /* seconds */
+	int64_t tv_nsec;         /* nanoseconds */
+};
+
+struct drm_exynos_g3d_wait {
+	__u32 fence;
+	__u32 pad;
+	struct drm_exynos_timespec timeout;
+};
+
 enum drm_exynos_ops_id {
 	EXYNOS_DRM_OPS_SRC,
 	EXYNOS_DRM_OPS_DST,
@@ -335,6 +532,9 @@ struct drm_exynos_ipp_cmd_ctrl {
 #define DRM_EXYNOS_IPP_QUEUE_BUF	0x32
 #define DRM_EXYNOS_IPP_CMD_CTRL	0x33
 
+#define DRM_EXYNOS_G3D_SUBMIT		0x40
+#define DRM_EXYNOS_G3D_WAIT		0x41
+
 #define DRM_IOCTL_EXYNOS_GEM_CREATE		DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_GEM_CREATE, struct drm_exynos_gem_create)
 
@@ -366,9 +566,15 @@ struct drm_exynos_ipp_cmd_ctrl {
 #define DRM_IOCTL_EXYNOS_IPP_CMD_CTRL		DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_IPP_CMD_CTRL, struct drm_exynos_ipp_cmd_ctrl)
 
+#define DRM_IOCTL_EXYNOS_G3D_SUBMIT		DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_SUBMIT, struct drm_exynos_g3d_submit)
+#define DRM_IOCTL_EXYNOS_G3D_WAIT		DRM_IOW(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_WAIT, struct drm_exynos_g3d_wait)
+
 /* EXYNOS specific events */
 #define DRM_EXYNOS_G2D_EVENT		0x80000000
 #define DRM_EXYNOS_IPP_EVENT		0x80000001
+#define DRM_EXYNOS_G3D_EVENT		0x80000002
 
 struct drm_exynos_g2d_event {
 	struct drm_event	base;
