@@ -227,6 +227,7 @@ struct drm_exynos_file_private {
 	struct exynos_drm_g2d_private	*g2d_priv;
 	struct exynos_drm_ipp_private	*ipp_priv;
 	struct file			*anon_filp;
+	void *g3d_priv;
 };
 
 /*
@@ -348,4 +349,5 @@ extern struct platform_driver fimc_driver;
 extern struct platform_driver rotator_driver;
 extern struct platform_driver gsc_driver;
 extern struct platform_driver ipp_driver;
+extern struct platform_driver s3c6410_g3d_driver;
 #endif

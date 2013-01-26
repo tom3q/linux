@@ -72,3 +72,26 @@ config DRM_EXYNOS_GSC
 	depends on DRM_EXYNOS_IPP && ARCH_EXYNOS5 && !ARCH_MULTIPLATFORM
 	help
 	  Choose this option if you want to use Exynos GSC for DRM.
+
+config DRM_EXYNOS_S3C6410_G3D
+	bool "Exynos DRM support for S3C6410 G3D"
+	depends on DRM_EXYNOS
+	help
+	  Choose this option if you want to use S3C6410 G3D with DRM.
+
+config DRM_EXYNOS_S3C6410_G3D_ALWAYS_ON
+	bool "Keep G3D powered on for debugging purposes"
+	depends on DRM_EXYNOS_S3C6410_G3D
+	help
+	  Choose this option to disable power management in the driver,
+	  so the GPU is kept powered on all the time. This is useful for
+	  accessing the hardware from userspace tools.
+
+config DRM_EXYNOS_S3C6410_G3D_DEBUG
+	bool "Enable debugging features of G3D driver"
+	depends on DRM_EXYNOS_S3C6410_G3D
+	help
+	  Select this option to compile in support for various debugging
+	  options available in G3D driver. Control over enabling of particular
+	  features is provided by debug_mask sysfs attribute. By default
+	  all options are disabled.
