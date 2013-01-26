@@ -119,6 +119,47 @@ struct drm_exynos_g2d_exec {
 	__u64					async;
 };
 
+struct drm_exynos_g3d_pipe {
+	__u32 pipe;
+	__u32 flags;
+	__u32 reserved[2];
+};
+
+struct drm_exynos_g3d_submit {
+	__u32 pipe;
+	__u32 handle;
+	__u32 offset;
+	__u32 length;
+	__u32 fence;
+	__u32 reserved[3];
+};
+
+/* timeouts are specified in clock-monotonic absolute times (to simplify
+ * restarting interrupted ioctls).  The following struct is logically the
+ * same as 'struct timespec' but 32/64b ABI safe.
+ */
+struct drm_exynos_timespec {
+	int64_t tv_sec;          /* seconds */
+	int64_t tv_nsec;         /* nanoseconds */
+};
+
+struct drm_exynos_g3d_wait {
+	__u32 pipe;
+	__u32 fence;
+	struct drm_exynos_timespec timeout;
+	__u32 reserved[2];
+};
+
+#define DRM_EXYNOS_G3D_PREP_READ	0x01
+#define DRM_EXYNOS_G3D_PREP_WRITE	0x02
+#define DRM_EXYNOS_G3D_PREP_NOSYNC	0x04
+
+struct drm_exynos_g3d_cpu_prep {
+	__u32 handle;
+	__u32 op;
+	struct drm_exynos_timespec timeout;
+};
+
 enum drm_exynos_ops_id {
 	EXYNOS_DRM_OPS_SRC,
 	EXYNOS_DRM_OPS_DST,
@@ -301,6 +342,13 @@ struct drm_exynos_ipp_cmd_ctrl {
 #define DRM_EXYNOS_IPP_QUEUE_BUF	0x32
 #define DRM_EXYNOS_IPP_CMD_CTRL	0x33
 
+#define DRM_EXYNOS_G3D_CREATE_PIPE	0x50
+#define DRM_EXYNOS_G3D_DESTROY_PIPE	0x51
+#define DRM_EXYNOS_G3D_SUBMIT		0x52
+#define DRM_EXYNOS_G3D_WAIT		0x53
+#define DRM_EXYNOS_G3D_CPU_PREP		0x54
+#define DRM_EXYNOS_G3D_CPU_FINI		0x55
+
 #define DRM_IOCTL_EXYNOS_GEM_CREATE		DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_GEM_CREATE, struct drm_exynos_gem_create)
 
@@ -326,9 +374,23 @@ struct drm_exynos_ipp_cmd_ctrl {
 #define DRM_IOCTL_EXYNOS_IPP_CMD_CTRL		DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_IPP_CMD_CTRL, struct drm_exynos_ipp_cmd_ctrl)
 
+#define DRM_IOCTL_EXYNOS_G3D_SUBMIT		DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_SUBMIT, struct drm_exynos_g3d_submit)
+#define DRM_IOCTL_EXYNOS_G3D_WAIT		DRM_IOW(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_WAIT, struct drm_exynos_g3d_wait)
+#define DRM_IOCTL_EXYNOS_G3D_CREATE_PIPE	DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_CREATE_PIPE, struct drm_exynos_g3d_pipe)
+#define DRM_IOCTL_EXYNOS_G3D_DESTROY_PIPE	DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_DESTROY_PIPE, struct drm_exynos_g3d_pipe)
+#define DRM_IOCTL_EXYNOS_G3D_CPU_PREP		DRM_IOW(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_CPU_PREP, struct drm_exynos_g3d_cpu_prep)
+#define DRM_IOCTL_EXYNOS_G3D_CPU_FINI		DRM_IOW(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_CPU_FINI, struct drm_exynos_g3d_cpu_prep)
+
 /* EXYNOS specific events */
 #define DRM_EXYNOS_G2D_EVENT		0x80000000
 #define DRM_EXYNOS_IPP_EVENT		0x80000001
+#define DRM_EXYNOS_G3D_EVENT		0x80000002
 
 struct drm_exynos_g2d_event {
 	struct drm_event	base;
