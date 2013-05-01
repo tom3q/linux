@@ -165,6 +165,67 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pwm0_out>;
 	};
+
+	fixed-regulators {
+		compatible = "simple-bus";
+
+		vdd_lcd: regulator-lcd {
+			compatible = "regulator-fixed";
+			regulator-name = "VDD_LCD";
+			regulator-min-voltage = <3300000>;
+			regulator-max-voltage = <3300000>;
+		};
+	};
+
+	display-panel {
+		compatible = "simple-panel";
+		power-supply = <&vdd_lcd>;
+		enable-gpios = <&gpe 0 0>;
+
+		display-timings {
+			native-mode = <&timing>;
+
+			timing: timing {
+				/* 480x272@60Hz */
+				clock-frequency = <10000000>;
+				hactive = <480>;
+				vactive = <272>;
+				hfront-porch = <4>;
+				hback-porch = <45>;
+				hsync-len = <40>;
+				vback-porch = <3>;
+				vfront-porch = <2>;
+				vsync-len = <6>;
+				vsync-active = <1>;
+				hsync-active = <1>;
+				de-active = <1>;
+				pixelclk-active = <0>;
+			};
+		};
+
+		port {
+			lcd_in: endpoint {
+				remote-endpoint = <&dpi_out>;
+			};
+		};
+	};
+};
+
+&fimd {
+	pinctrl-names = "default";
+	pinctrl-0 = <&lcd_data24>;
+	samsung,invert-vclk;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	port@3 {
+		reg = <3>;
+
+		dpi_out: endpoint {
+			remote-endpoint = <&lcd_in>;
+		};
+	};
 };
 
 &sdhci0 {
