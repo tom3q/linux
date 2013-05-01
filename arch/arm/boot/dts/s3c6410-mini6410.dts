@@ -167,6 +167,33 @@
 	};
 };
 
+&fimd {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&lcd_data24>, <&lcd_power>;
+
+	display-timings {
+		native-mode = <&timing0>;
+
+		timing0: timing@0 {
+			/* 1280x800 */
+			clock-frequency = <0>;
+			hactive = <480>;
+			vactive = <272>;
+			hfront-porch = <4>;
+			hback-porch = <45>;
+			hsync-len = <40>;
+			vback-porch = <3>;
+			vfront-porch = <2>;
+			vsync-len = <6>;
+			vsync-active = <1>;
+			hsync-active = <1>;
+			de-active = <1>;
+			pixelclk-active = <0>;
+		};
+	};
+};
+
 &sdhci0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&sd0_clk>, <&sd0_cmd>, <&sd0_cd>, <&sd0_bus4>;
@@ -212,6 +239,12 @@
 		samsung,pins = "gpn-0", "gpn-1", "gpn-2", "gpn-3",
 				"gpn-4", "gpn-5", "gpl-11", "gpl-12";
 		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	lcd_power: lcd-power {
+		samsung,pins = "gpe-0";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_UP>;
 	};
 };
 
