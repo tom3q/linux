@@ -18,6 +18,7 @@
 
 #include "skeleton.dtsi"
 #include <dt-bindings/clock/samsung,s3c64xx-clock.h>
+#include <dt-bindings/arm/s3c64xx-power-domains.h>
 
 / {
 	aliases {
@@ -54,6 +55,18 @@
 			interrupt-controller;
 			reg = <0x71300000 0x1000>;
 			#interrupt-cells = <1>;
+		};
+
+		fimd: display@77100000 {
+			compatible = "samsung,s3c6400-fimd";
+			reg = <0x77100000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <29>, <30>, <31>;
+			interrupt-names = "fifo", "vsync", "lcd_sys";
+			clocks = <&clocks HCLK_LCD>, <&clocks SCLK_LCD>;
+			clock-names = "fimd", "sclk_fimd";
+			power-domain = <&clocks DOMAIN_F>;
+			status = "disabled";
 		};
 
 		sdhci0: sdhci@7c200000 {
