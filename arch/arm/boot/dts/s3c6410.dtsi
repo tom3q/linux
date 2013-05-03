@@ -37,6 +37,16 @@
 };
 
 &soc {
+	g3d: gpu@72000000 {
+		compatible = "samsung,s3c6410-g3d";
+		reg = <0x72000000 0x80000>;
+		interrupt-parent = <&vic0>;
+		interrupts = <8>;
+		clock-names = "bus-clk";
+		clocks = <&clocks HCLK_3DSE>;
+		power-domain = <&clocks DOMAIN_G>;
+	};
+
 	clocks: clock-controller@7e00f000 {
 		compatible = "samsung,s3c6410-clock";
 		reg = <0x7e00f000 0x1000>;
