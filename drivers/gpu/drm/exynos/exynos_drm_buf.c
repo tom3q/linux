@@ -21,7 +21,6 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 {
 	int ret = 0;
 	enum dma_attr attr;
-	unsigned int nr_pages;
 
 	if (buf->dma_addr) {
 		DRM_DEBUG_KMS("already allocated.\n");
@@ -48,31 +47,40 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 		attr = DMA_ATTR_NON_CONSISTENT;
 
 	dma_set_attr(attr, &buf->dma_attrs);
-	dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &buf->dma_attrs);
 
-	buf->pages = dma_alloc_attrs(dev->dev, buf->size,
+	buf->kvaddr = dma_alloc_attrs(dev->dev, buf->size,
 			&buf->dma_addr, GFP_KERNEL, &buf->dma_attrs);
-	if (!buf->pages) {
+	if (!buf->kvaddr) {
 		DRM_ERROR("failed to allocate buffer.\n");
 		return -ENOMEM;
 	}
 
-	nr_pages = buf->size >> PAGE_SHIFT;
-	buf->sgt = drm_prime_pages_to_sg(buf->pages, nr_pages);
+	buf->sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
 	if (IS_ERR(buf->sgt)) {
-		DRM_ERROR("failed to get sg table.\n");
+		DRM_ERROR("failed to allocate sg table.\n");
 		ret = PTR_ERR(buf->sgt);
 		goto err_free_attrs;
 	}
 
-	DRM_DEBUG_KMS("dma_addr(0x%lx), size(0x%lx)\n",
+	ret = dma_get_sgtable(dev->dev, buf->sgt, buf->kvaddr, buf->dma_addr,
+			buf->size);
+	if (ret < 0) {
+		DRM_ERROR("failed to get sgtable.\n");
+		goto err_free_sgt;
+	}
+
+	DRM_DEBUG_KMS("vaddr(0x%lx), dma_addr(0x%lx), size(0x%lx)\n",
+			(unsigned long)buf->kvaddr,
 			(unsigned long)buf->dma_addr,
 			buf->size);
 
 	return ret;
 
+err_free_sgt:
+	kfree(buf->sgt);
+	buf->sgt = NULL;
 err_free_attrs:
-	dma_free_attrs(dev->dev, buf->size, buf->pages,
+	dma_free_attrs(dev->dev, buf->size, buf->kvaddr,
 			(dma_addr_t)buf->dma_addr, &buf->dma_attrs);
 	buf->dma_addr = (dma_addr_t)NULL;
 
@@ -87,7 +95,8 @@ static void lowlevel_buffer_deallocate(struct drm_device *dev,
 		return;
 	}
 
-	DRM_DEBUG_KMS("dma_addr(0x%lx), size(0x%lx)\n",
+	DRM_DEBUG_KMS("vaddr(0x%lx), dma_addr(0x%lx), size(0x%lx)\n",
+			(unsigned long)buf->kvaddr,
 			(unsigned long)buf->dma_addr,
 			buf->size);
 
@@ -96,7 +105,7 @@ static void lowlevel_buffer_deallocate(struct drm_device *dev,
 	kfree(buf->sgt);
 	buf->sgt = NULL;
 
-	dma_free_attrs(dev->dev, buf->size, buf->pages,
+	dma_free_attrs(dev->dev, buf->size, buf->kvaddr,
 				(dma_addr_t)buf->dma_addr, &buf->dma_attrs);
 	buf->dma_addr = (dma_addr_t)NULL;
 }
