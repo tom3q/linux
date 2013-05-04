@@ -48,24 +48,29 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 
 	dma_set_attr(attr, &buf->dma_attrs);
 
-	buf->kvaddr = dma_alloc_attrs(dev->dev, buf->size,
-			&buf->dma_addr, GFP_KERNEL, &buf->dma_attrs);
-	if (!buf->kvaddr) {
+	buf->cookie = dma_alloc_attrs(dev->dev, buf->size,
+				&buf->dma_addr, GFP_KERNEL,
+				&buf->dma_attrs);
+	if (!buf->cookie) {
 		DRM_ERROR("failed to allocate buffer.\n");
 		return -ENOMEM;
 	}
+	if (dma_get_attr(DMA_ATTR_NO_KERNEL_MAPPING, &buf->dma_attrs))
+		buf->kvaddr = NULL;
+	else
+		buf->kvaddr = buf->cookie;
 
-	buf->sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
+	buf->sgt = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
 	if (IS_ERR(buf->sgt)) {
 		DRM_ERROR("failed to allocate sg table.\n");
 		ret = PTR_ERR(buf->sgt);
 		goto err_free_attrs;
 	}
 
-	ret = dma_get_sgtable(dev->dev, buf->sgt, buf->kvaddr, buf->dma_addr,
-			buf->size);
-	if (ret < 0) {
-		DRM_ERROR("failed to get sgtable.\n");
+	ret = dma_get_sgtable(dev->dev, buf->sgt, buf->cookie,
+						buf->dma_addr, buf->size);
+	if (ret) {
+		DRM_ERROR("failed to get sg table.\n");
 		goto err_free_sgt;
 	}
 
@@ -80,7 +85,7 @@ err_free_sgt:
 	kfree(buf->sgt);
 	buf->sgt = NULL;
 err_free_attrs:
-	dma_free_attrs(dev->dev, buf->size, buf->kvaddr,
+	dma_free_attrs(dev->dev, buf->size, buf->cookie,
 			(dma_addr_t)buf->dma_addr, &buf->dma_attrs);
 	buf->dma_addr = (dma_addr_t)NULL;
 
@@ -105,8 +110,9 @@ static void lowlevel_buffer_deallocate(struct drm_device *dev,
 	kfree(buf->sgt);
 	buf->sgt = NULL;
 
-	dma_free_attrs(dev->dev, buf->size, buf->kvaddr,
+	dma_free_attrs(dev->dev, buf->size, buf->cookie,
 				(dma_addr_t)buf->dma_addr, &buf->dma_attrs);
+
 	buf->dma_addr = (dma_addr_t)NULL;
 }
 
