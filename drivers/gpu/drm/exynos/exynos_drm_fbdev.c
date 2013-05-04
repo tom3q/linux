@@ -96,19 +96,10 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 
 	/* map pages with kernel virtual space. */
 	if (!buffer->kvaddr) {
-		if (is_drm_iommu_supported(dev)) {
-			unsigned int nr_pages = buffer->size >> PAGE_SHIFT;
-
-			buffer->kvaddr = (void __iomem *) vmap(buffer->pages,
+		unsigned int nr_pages = buffer->size >> PAGE_SHIFT;
+		buffer->kvaddr = (void __iomem *) vmap(buffer->pages,
 					nr_pages, VM_MAP,
 					pgprot_writecombine(PAGE_KERNEL));
-		} else {
-			phys_addr_t dma_addr = buffer->dma_addr;
-			if (dma_addr)
-				buffer->kvaddr = (void __iomem *)phys_to_virt(dma_addr);
-			else
-				buffer->kvaddr = (void __iomem *)NULL;
-		}
 		if (!buffer->kvaddr) {
 			DRM_ERROR("failed to map pages to kernel space.\n");
 			return -EIO;
@@ -313,7 +304,7 @@ static void exynos_drm_fbdev_destroy(struct drm_device *dev,
 	struct exynos_drm_gem_obj *exynos_gem_obj = exynos_fbd->exynos_gem_obj;
 	struct drm_framebuffer *fb;
 
-	if (is_drm_iommu_supported(dev) && exynos_gem_obj->buffer->kvaddr)
+	if (exynos_gem_obj->buffer->kvaddr)
 		vunmap(exynos_gem_obj->buffer->kvaddr);
 
 	/* release drm framebuffer and real buffer */
