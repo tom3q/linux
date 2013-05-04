@@ -26,6 +26,7 @@
  *	- this address could be physical address without IOMMU and
  *	device address with IOMMU.
  * @write: whether pages will be written to by the caller.
+ * #cookie: return value of dma_alloc_attrs.
  * @sgt: sg table to transfer page data.
  * @size: size of allocated memory region.
  * @pfnmap: indicate whether memory region from userptr is mmaped with
@@ -37,6 +38,7 @@ struct exynos_drm_gem_buf {
 	dma_addr_t		dma_addr;
 	struct dma_attrs	dma_attrs;
 	unsigned int		write;
+	void			*cookie;
 	struct sg_table		*sgt;
 	unsigned long		size;
 	bool			pfnmap;

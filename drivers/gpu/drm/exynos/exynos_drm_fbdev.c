@@ -94,6 +94,12 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 		return -EFAULT;
 	}
 
+	/* check if the buffer is mapped. */
+	if (!buffer->kvaddr) {
+		DRM_ERROR("unmapped buffers are not supported.\n");
+		return -EINVAL;
+	}
+
 	/* buffer count to framebuffer always is 1 at booting time. */
 	exynos_drm_fb_set_buf_cnt(fb, 1);
 
