@@ -48,6 +48,9 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 
 	dma_set_attr(attr, &buf->dma_attrs);
 
+	if (flags & EXYNOS_BO_UNMAPPED)
+		dma_set_attr(DMA_ATTR_NO_KERNEL_MAPPING, &buf->dma_attrs);
+
 	buf->cookie = dma_alloc_attrs(dev->dev, buf->size,
 				&buf->dma_addr, GFP_KERNEL,
 				&buf->dma_attrs);
