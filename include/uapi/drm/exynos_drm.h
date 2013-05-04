@@ -105,8 +105,10 @@ enum e_drm_exynos_gem_mem_type {
 	EXYNOS_BO_CACHABLE	= 1 << 1,
 	/* write-combine mapping. */
 	EXYNOS_BO_WC		= 1 << 2,
+	/* No kernel mapping */
+	EXYNOS_BO_UNMAPPED	= 1 << 3,
 	EXYNOS_BO_MASK		= EXYNOS_BO_NONCONTIG | EXYNOS_BO_CACHABLE |
-					EXYNOS_BO_WC
+					EXYNOS_BO_WC | EXYNOS_BO_UNMAPPED
 };
 
 struct drm_exynos_g2d_get_ver {
