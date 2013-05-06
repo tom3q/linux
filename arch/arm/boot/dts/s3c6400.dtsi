@@ -37,5 +37,6 @@
 		compatible = "samsung,s3c6400-clock";
 		reg = <0x7e00f000 0x1000>;
 		#clock-cells = <1>;
+		#power-domain-cells = <1>;
 	};
 };
