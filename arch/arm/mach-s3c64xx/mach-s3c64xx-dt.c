@@ -15,6 +15,7 @@
 #include <asm/system_misc.h>
 
 #include <plat/cpu.h>
+#include <plat/pm.h>
 #include <plat/watchdog-reset.h>
 
 #include <mach/map.h>
@@ -49,6 +50,7 @@ static void __init s3c64xx_dt_map_io(void)
 static void __init s3c64xx_dt_init_machine(void)
 {
 	samsung_wdt_reset_of_init();
+	s3c64xx_pm_init();
 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
 }
 
