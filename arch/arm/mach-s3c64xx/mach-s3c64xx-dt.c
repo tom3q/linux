@@ -15,6 +15,7 @@
 #include <asm/system_misc.h>
 
 #include <plat/cpu.h>
+#include <plat/pm.h>
 #include <plat/watchdog-reset.h>
 
 #include <mach/map.h>
@@ -49,7 +50,13 @@ static void __init s3c64xx_dt_map_io(void)
 static void __init s3c64xx_dt_init_machine(void)
 {
 	samsung_wdt_reset_of_init();
+	s3c64xx_pm_init();
 	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
+}
+
+static void __init s3c64xx_dt_init_late(void)
+{
+	s3c64xx_pm_late_initcall();
 }
 
 static void s3c64xx_dt_restart(enum reboot_mode mode, const char *cmd)
@@ -72,5 +79,6 @@ DT_MACHINE_START(S3C6400_DT, "Samsung S3C64xx (Flattened Device Tree)")
 	.dt_compat	= s3c64xx_dt_compat,
 	.map_io		= s3c64xx_dt_map_io,
 	.init_machine	= s3c64xx_dt_init_machine,
+	.init_late	= s3c64xx_dt_init_late,
 	.restart        = s3c64xx_dt_restart,
 MACHINE_END
