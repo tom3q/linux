@@ -147,6 +147,7 @@ static struct s3c64xx_pm_domain s3c64xx_pm_i = {
 
 static struct s3c64xx_pm_domain s3c64xx_pm_g = {
 	.ena = S3C64XX_NORMALCFG_DOMAIN_G_ON,
+	.pwr_stat = S3C64XX_BLKPWRSTAT_G,
 	.pd = {
 		.name = "G",
 		.power_off = s3c64xx_pd_off,
