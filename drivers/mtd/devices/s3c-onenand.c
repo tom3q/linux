@@ -154,6 +154,8 @@ struct s3c_onenand {
 	unsigned int version_id;
 	unsigned int technology;
 	unsigned int options;
+
+	void *bbm;
 };
 
 /*
@@ -240,7 +242,7 @@ static const struct onenand_manufacturers onenand_manuf_ids[] = {
  */
 static void onenand_print_device_info(struct s3c_onenand *this)
 {
-	int vcc, demuxed, ddp, density, flexonenand;
+	int vcc, demuxed, ddp, density;
 	int size = ARRAY_SIZE(onenand_manuf_ids);
 	char *name;
         int i;
@@ -258,10 +260,8 @@ static void onenand_print_device_info(struct s3c_onenand *this)
         demuxed = this->device_id & ONENAND_DEVICE_IS_DEMUX;
         ddp = this->device_id & ONENAND_DEVICE_IS_DDP;
         density = onenand_get_density(this->device_id);
-	flexonenand = this->device_id & DEVICE_IS_FLEXONENAND;
-	dev_info(this->dev, "%s%sOneNAND%s %dMB %sV 16-bit (0x%02x)\n",
+	dev_info(this->dev, "%sOneNAND%s %dMB %sV 16-bit (0x%02x)\n",
 		demuxed ? "" : "Muxed ",
-		flexonenand ? "Flex-" : "",
                 ddp ? "(DDP)" : "",
                 (16 << density),
                 vcc ? "2.65/3.3" : "1.8",
@@ -337,11 +337,6 @@ static void onenand_check_features(struct s3c_onenand *this)
 	if (ONENAND_IS_4KB_PAGE(this))
 		this->options &= ~ONENAND_HAS_2PLANE;
 
-	if (FLEXONENAND(this)) {
-		this->options &= ~ONENAND_HAS_CONT_LOCK;
-		this->options |= ONENAND_HAS_UNLOCK_ALL;
-	}
-
 	if (this->options & ONENAND_HAS_CONT_LOCK)
 		dev_dbg(this->dev, "Lock scheme is Continuous Lock\n");
 	if (this->options & ONENAND_HAS_UNLOCK_ALL)
@@ -352,6 +347,237 @@ static void onenand_check_features(struct s3c_onenand *this)
 		dev_dbg(this->dev, "Chip has 4KiB pagesize\n");
 	if (this->options & ONENAND_HAS_CACHE_PROGRAM)
 		dev_dbg(this->dev, "Chip has cache program feature\n");
+}
+
+/**
+ * onenand_bbt_read_oob - [MTD Interface] OneNAND read out-of-band for bbt scan
+ * @param mtd		MTD device structure
+ * @param from		offset to read from
+ * @param ops		oob operation description structure
+ *
+ * OneNAND read out-of-band data from the spare area for bbt scan
+ */
+static int s3c_onenand_bbt_read_oob(struct mtd_info *mtd, loff_t from,
+						struct mtd_oob_ops *ops)
+{
+	return -EINVAL;
+}
+
+/**
+ * check_short_pattern - [GENERIC] check if a pattern is in the buffer
+ * @param buf		the buffer to search
+ * @param len		the length of buffer to search
+ * @param paglen	the pagelength
+ * @param td		search pattern descriptor
+ *
+ * Check for a pattern at the given place. Used to search bad block
+ * tables and good / bad block identifiers. Same as check_pattern, but
+ * no optional empty check and the pattern is expected to start
+ * at offset 0.
+ *
+ */
+static int check_short_pattern(uint8_t *buf, int len, int paglen,
+						struct nand_bbt_descr *td)
+{
+	int i;
+	uint8_t *p = buf;
+
+	/* Compare the pattern */
+	for (i = 0; i < td->len; i++) {
+		if (p[i] != td->pattern[i])
+			return -1;
+	}
+        return 0;
+}
+
+/**
+ * create_bbt - [GENERIC] Create a bad block table by scanning the device
+ * @param mtd		MTD device structure
+ * @param buf		temporary buffer
+ * @param bd		descriptor for the good/bad block search pattern
+ * @param chip		create the table for a specific chip, -1 read all chips.
+ *              Applies only if NAND_BBT_PERCHIP option is set
+ *
+ * Create a bad block table by scanning the device
+ * for the given good/bad block identify pattern
+ */
+static int create_bbt(struct mtd_info *mtd, struct nand_bbt_descr *bd, int chip)
+{
+	struct s3c_onenand *this = mtd->priv;
+	struct bbm_info *bbm = this->bbm;
+	int i, j, numblocks, len, scanlen;
+	int startblock;
+	loff_t from;
+	size_t readlen, ooblen;
+	struct mtd_oob_ops ops;
+	uint8_t *buf;
+	int ret = 0;
+
+	printk(KERN_INFO "Scanning device for bad blocks\n");
+
+	len = 2;
+
+	/* We need only read few bytes from the OOB area */
+	scanlen = ooblen = 0;
+	readlen = bd->len;
+
+	/* Allocate temporary buffer */
+	buf = kzalloc(readlen, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	/* chip == -1 case only */
+	/* Note that numblocks is 2 * (real numblocks) here;
+	 * see i += 2 below as it makses shifting and masking less painful
+	 */
+	numblocks = mtd->size >> (bbm->bbt_erase_shift - 1);
+	startblock = 0;
+	from = 0;
+
+	ops.mode = MTD_OPS_PLACE_OOB;
+	ops.ooblen = readlen;
+	ops.oobbuf = buf;
+	ops.len = ops.ooboffs = ops.retlen = ops.oobretlen = 0;
+
+	for (i = startblock; i < numblocks; ) {
+		int ret;
+
+		for (j = 0; j < len; j++) {
+			/* No need to read pages fully,
+			 * just read required OOB bytes */
+			ret = s3c_onenand_bbt_read_oob(mtd,
+				from + j * mtd->writesize + bd->offs, &ops);
+
+			/* If it is a initial bad block, just ignore it */
+			if (ret == ONENAND_BBT_READ_FATAL_ERROR) {
+				ret = -EIO;
+				goto end;
+			}
+
+			if (ret || check_short_pattern(&buf[j * scanlen],
+					       scanlen, mtd->writesize, bd)) {
+				bbm->bbt[i >> 3] |= 0x03 << (i & 0x6);
+				printk(KERN_INFO "OneNAND eraseblock %d is an "
+					"initial bad block\n", i >> 1);
+				mtd->ecc_stats.badblocks++;
+				break;
+			}
+		}
+		i += 2;
+
+		from += (1 << bbm->bbt_erase_shift);
+	}
+
+end:
+	kfree(buf);
+	return ret;
+}
+
+
+/**
+ * onenand_memory_bbt - [GENERIC] create a memory based bad block table
+ * @param mtd		MTD device structure
+ * @param bd		descriptor for the good/bad block search pattern
+ *
+ * The function creates a memory based bbt by scanning the device
+ * for manufacturer / software marked good / bad blocks
+ */
+static inline int onenand_memory_bbt (struct mtd_info *mtd,
+						struct nand_bbt_descr *bd)
+{
+        bd->options &= ~NAND_BBT_SCANEMPTY;
+	return create_bbt(mtd, bd, -1);
+}
+
+/**
+ * onenand_isbad_bbt - [OneNAND Interface] Check if a block is bad
+ * @param mtd		MTD device structure
+ * @param offs		offset in the device
+ * @param allowbbt	allow access to bad block table region
+ */
+static int onenand_isbad_bbt(struct mtd_info *mtd, loff_t offs, int allowbbt)
+{
+	struct s3c_onenand *this = mtd->priv;
+	struct bbm_info *bbm = this->bbm;
+	int block;
+	uint8_t res;
+
+	/* Get block number * 2 */
+	block = (int) ((offs >> mtd->erasesize_shift) << 1);
+	res = (bbm->bbt[block >> 3] >> (block & 0x06)) & 0x03;
+
+	pr_debug("onenand_isbad_bbt: bbt info for offs 0x%08x: (block %d) 0x%02x\n",
+					(unsigned int) offs, block >> 1, res);
+
+	switch ((int) res) {
+	case 0x00:	return 0;
+	case 0x01:	return 1;
+	case 0x02:	return allowbbt ? 0 : 1;
+	}
+
+	return 1;
+}
+
+/*
+ * Define some generic bad / good block scan pattern which are used
+ * while scanning a device for factory marked good / bad blocks.
+ */
+static uint8_t scan_ff_pattern[] = { 0xff, 0xff };
+
+static struct nand_bbt_descr largepage_memorybased = {
+	.options = 0,
+	.offs = 0,
+	.len = 2,
+	.pattern = scan_ff_pattern,
+};
+
+/**
+ * onenand_scan_bbt - [OneNAND Interface] Create bad block table(s)
+ * @param mtd		MTD device structure
+ * @param bd		descriptor for the good/bad block search pattern
+ *
+ * The function checks, if a bad block table(s) is/are already
+ * available. If not it scans the device for manufacturer
+ * marked good / bad blocks and writes the bad block table(s) to
+ * the selected place.
+ *
+ * The bad block table memory is allocated here. It is freed
+ * by the onenand_release function.
+ *
+ */
+static int s3c_onenand_scan_bbt(struct mtd_info *mtd)
+{
+	struct s3c_onenand *this = mtd->priv;
+	struct bbm_info *bbm;
+	int len, ret = 0;
+
+	bbm = kzalloc(sizeof(struct bbm_info), GFP_KERNEL);
+	if (!bbm)
+		return -ENOMEM;
+	this->bbm = bbm;
+
+	len = mtd->size >> (mtd->erasesize_shift + 2);
+	/* Allocate memory (2bit per block) and clear the memory bad block table */
+	bbm->bbt = kzalloc(len, GFP_KERNEL);
+	if (!bbm->bbt)
+		return -ENOMEM;
+
+	/* Set the bad block position */
+	bbm->badblockpos = ONENAND_BADBLOCK_POS;
+
+	/* Set erase shift */
+	bbm->bbt_erase_shift = mtd->erasesize_shift;
+
+	bbm->isbad_bbt = onenand_isbad_bbt;
+
+	/* Scan the device to build a memory based bad block table */
+	if ((ret = onenand_memory_bbt(mtd, &largepage_memorybased))) {
+		printk(KERN_ERR "onenand_scan_bbt: Can't scan flash and build the RAM-based BBT\n");
+		kfree(bbm->bbt);
+		bbm->bbt = NULL;
+	}
+
+	return ret;
 }
 
 /**
@@ -425,7 +651,7 @@ static int s3c_onenand_write_oob(struct mtd_info *mtd, loff_t to,
 }
 
 /**
- * onenand_panic_write - [MTD Interface] write buffer to FLASH in a panic context
+ * onenand_panic_write - [MTD Interface] write to FLASH in a panic context
  * @param mtd		MTD device structure
  * @param to		offset to write to
  * @param len		number of bytes to write
@@ -477,11 +703,11 @@ static int s3c_onenand_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 }
 
 /**
- * onenand_block_isbad - [MTD Interface] Check whether the block at the given offset is bad
+ * onenand_block_isbad - [MTD Interface] Check whether the block is bad
  * @param mtd		MTD device structure
  * @param ofs		offset relative to mtd start
  *
- * Check whether the block is bad
+ * Check whether the block at the given offset is bad
  */
 static int s3c_onenand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 {
@@ -489,11 +715,11 @@ static int s3c_onenand_block_isbad(struct mtd_info *mtd, loff_t ofs)
 }
 
 /**
- * onenand_block_markbad - [MTD Interface] Mark the block at the given offset as bad
+ * onenand_block_markbad - [MTD Interface] Mark the block as bad
  * @param mtd		MTD device structure
  * @param ofs		offset relative to mtd start
  *
- * Mark the block as bad
+ * Mark the block at the given offset as bad
  */
 static int s3c_onenand_block_markbad(struct mtd_info *mtd, loff_t ofs)
 {
@@ -584,7 +810,7 @@ static int s3c_onenand_setup(struct s3c_onenand *this)
 	mtd->owner = THIS_MODULE;
 	mtd->writebufsize = mtd->writesize;
 
-	return 0;
+	return s3c_onenand_scan_bbt(mtd);
 }
 
 static const struct s3c_onenand_variant s3c6400_onenand_variant = {
