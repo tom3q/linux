@@ -18,6 +18,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/onenand.h>
 #include <linux/mtd/partitions.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
@@ -79,7 +80,7 @@
 #define CACHE_PRG_EN_REG		0x360	/* s5pc100 only */
 #define SINGLE_PAGE_BUF_REG		0x370	/* s5pc100 only */
 #define OFFSET_ADDR_REG			0x380	/* s5pc100 only */
-#define INT_MON_STATUS			0x390	/* s5pc100 only */
+#define INT_MON_STATUS_REG		0x390	/* s5pc100 only */
 
 #define ONENAND_MEM_RESET_HOT		0x3
 #define ONENAND_MEM_RESET_COLD		0x2
@@ -148,6 +149,7 @@ struct s3c_onenand {
 	const struct s3c_onenand_variant *variant;
 	void __iomem *base;
 	void __iomem *ahb_addr;
+	struct mutex lock;
 
 	unsigned int manuf_id;
 	unsigned int device_id;
@@ -156,7 +158,13 @@ struct s3c_onenand {
 	unsigned int options;
 
 	void *bbm;
+	void *buffer;
 };
+
+static inline struct s3c_onenand *to_onenand(struct mtd_info *mtd)
+{
+	return container_of(mtd, struct s3c_onenand, mtd);
+}
 
 /*
  * onenand_oob_128 - oob info for OneNAND with 4KB page
@@ -403,7 +411,7 @@ static int check_short_pattern(uint8_t *buf, int len, int paglen,
  */
 static int create_bbt(struct mtd_info *mtd, struct nand_bbt_descr *bd, int chip)
 {
-	struct s3c_onenand *this = mtd->priv;
+	struct s3c_onenand *this = to_onenand(mtd);
 	struct bbm_info *bbm = this->bbm;
 	int i, j, numblocks, len, scanlen;
 	int startblock;
@@ -490,14 +498,13 @@ static inline int onenand_memory_bbt (struct mtd_info *mtd,
 }
 
 /**
- * onenand_isbad_bbt - [OneNAND Interface] Check if a block is bad
+ * s3c_onenand_block_isbad - [OneNAND Interface] Check if a block is bad
  * @param mtd		MTD device structure
  * @param offs		offset in the device
- * @param allowbbt	allow access to bad block table region
  */
-static int onenand_isbad_bbt(struct mtd_info *mtd, loff_t offs, int allowbbt)
+static int s3c_onenand_block_isbad(struct mtd_info *mtd, loff_t offs)
 {
-	struct s3c_onenand *this = mtd->priv;
+	struct s3c_onenand *this = to_onenand(mtd);
 	struct bbm_info *bbm = this->bbm;
 	int block;
 	uint8_t res;
@@ -506,16 +513,10 @@ static int onenand_isbad_bbt(struct mtd_info *mtd, loff_t offs, int allowbbt)
 	block = (int) ((offs >> mtd->erasesize_shift) << 1);
 	res = (bbm->bbt[block >> 3] >> (block & 0x06)) & 0x03;
 
-	pr_debug("onenand_isbad_bbt: bbt info for offs 0x%08x: (block %d) 0x%02x\n",
-					(unsigned int) offs, block >> 1, res);
+	pr_debug("%s: bbt info for offs 0x%08llx: (block %d) 0x%02x\n",
+					__func__, offs, block >> 1, res);
 
-	switch ((int) res) {
-	case 0x00:	return 0;
-	case 0x01:	return 1;
-	case 0x02:	return allowbbt ? 0 : 1;
-	}
-
-	return 1;
+	return !!res;
 }
 
 /*
@@ -547,7 +548,7 @@ static struct nand_bbt_descr largepage_memorybased = {
  */
 static int s3c_onenand_scan_bbt(struct mtd_info *mtd)
 {
-	struct s3c_onenand *this = mtd->priv;
+	struct s3c_onenand *this = to_onenand(mtd);
 	struct bbm_info *bbm;
 	int len, ret = 0;
 
@@ -567,8 +568,6 @@ static int s3c_onenand_scan_bbt(struct mtd_info *mtd)
 
 	/* Set erase shift */
 	bbm->bbt_erase_shift = mtd->erasesize_shift;
-
-	bbm->isbad_bbt = onenand_isbad_bbt;
 
 	/* Scan the device to build a memory based bad block table */
 	if ((ret = onenand_memory_bbt(mtd, &largepage_memorybased))) {
@@ -592,6 +591,71 @@ static int s3c_onenand_erase(struct mtd_info *mtd, struct erase_info *instr)
 	return -EINVAL;
 }
 
+#ifdef BURST_READ
+static inline void s3c_onenand_map01_read(struct s3c6410_onenand *onenand,
+				unsigned int addr, int count, unsigned int *buf)
+{
+	__asm__ (
+		"1:\n"
+		"\tldmia %1, {r0-r7}\n"
+		"\tstmia %2!, {r0-r7}\n"
+		"\tsubs %0, #1\n"
+		"\tbne 1b\n"
+		:
+		: "r"(count / 8),
+			"r"(onenand->ahb_addr + addr), "r"(buf)
+		: "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"
+	);
+}
+#else
+static inline void s3c_onenand_map01_read(struct s3c_onenand *this,
+			unsigned int block, unsigned int page, u_char *buf)
+{
+	const struct s3c_onenand_variant *variant = this->variant;
+	void __iomem *addr = this->ahb_addr;
+	u32 *_buf = (u32 *)buf;
+	int count = this->mtd.writesize / 4;
+	int i;
+
+	addr += MAP_01 << variant->cmd_map_shift;
+	addr += block << variant->fba_shift;
+	addr += page << variant->fpa_shift;
+
+	for (i = 0; i < count; i++)
+		*_buf++ = readl(addr);
+}
+#endif
+
+static int s3c_onenand_read_page(struct s3c_onenand *this,
+						loff_t from, u_char *buf)
+{
+	struct mtd_info *mtd = &this->mtd;
+	unsigned int block, page;
+
+	block = from >> mtd->erasesize_shift;
+	page = (from & mtd->erasesize_mask) >> mtd->writesize_shift;
+
+	s3c_onenand_map01_read(this, block, page, buf);
+
+	/* TODO: Check for ECC errors */
+
+	return 0;
+}
+
+static int s3c_onenand_read_partial(struct s3c_onenand *this,
+		loff_t from, unsigned int offset, unsigned int len, u_char *buf)
+{
+	int ret;
+
+	ret = s3c_onenand_read_page(this, from, this->buffer);
+	if (ret)
+		return ret;
+
+	memcpy(buf, this->buffer + offset, len);
+
+	return 0;
+}
+
 /**
  * onenand_read - [MTD Interface] Read data from flash
  * @param mtd		MTD device structure
@@ -603,10 +667,114 @@ static int s3c_onenand_erase(struct mtd_info *mtd, struct erase_info *instr)
  * Read with ecc
 */
 static int s3c_onenand_read(struct mtd_info *mtd, loff_t from, size_t len,
-	size_t *retlen, u_char *buf)
+						size_t *retlen, u_char *buf)
 {
-	return -EINVAL;
+	struct s3c_onenand *this = to_onenand(mtd);
+	unsigned int offset = from & mtd->writesize_mask;
+	unsigned int pages;
+	int ret;
+
+	from &= ~mtd->writesize_mask;
+	pages = (from + len + mtd->writesize - 1) >> mtd->writesize_shift;
+
+	mutex_lock(&this->lock);
+
+	if (pages >= 2)
+		s3c_onenand_prefetch_pages(this, from, pages, false);
+
+	if (offset) {
+		unsigned int partial_len = len;
+
+		if (offset + len > mtd->writesize)
+			partial_len = mtd->writesize - offset;
+
+		ret = s3c_onenand_read_partial(this,
+					from, offset, partial_len, buf, oob);
+		if (ret)
+			goto end;
+
+		len -= partial_len;
+		buf += partial_len;
+		from += mtd->writesize;
+	}
+
+	while (len >= mtd->writesize) {
+		ret = s3c_onenand_read_page(this, from, buf);
+		if (ret)
+			goto end;
+
+		len -= mtd->writesize;
+		buf += mtd->writesize;
+		from += mtd->writesize;
+	}
+
+	if (len)
+		ret = s3c_onenand_read_partial(this, from, 0, len, buf);
+
+end:
+	if (ret && pages >= 2)
+		s3c_onenand_reset(this);
+
+	mutex_unlock(&this->lock);
+
+	return ret;
 }
+
+#ifdef CONFIG_MTD_ONENAND_S3C6410_BURST_WRITE
+static inline void s3c6410_onenand_write(struct s3c6410_onenand *onenand,
+				unsigned int addr, int count, unsigned int *buf)
+{
+	__asm__ (
+		"1:\n"
+		"\tldmia %1!, {r0-r7}\n"
+		"\tstmia %2, {r0-r7}\n"
+		"\tsubs %0, #1\n"
+		"\tbne 1b\n"
+		:
+		: "r"(count / 8),
+			"r"(buf), "r"(onenand->ahb_addr + addr)
+		: "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"
+	);
+}
+
+static inline void s3c6410_onenand_dummy_write(
+		struct s3c6410_onenand *onenand, unsigned int addr, int count)
+{
+	__asm__ (
+		"\tmvn r0, #0\n"
+		"\tmvn r1, #0\n"
+		"\tmvn r2, #0\n"
+		"\tmvn r3, #0\n"
+		"\tmvn r4, #0\n"
+		"\tmvn r5, #0\n"
+		"\tmvn r6, #0\n"
+		"\tmvn r7, #0\n"
+		"1:\n"
+		"\tstmia %1, {r0-r7}\n"
+		"\tsubs %0, #1\n"
+		"\tbne 1b\n"
+		:
+		: "r"(count / 8), "r"(onenand->ahb_addr + addr)
+		: "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7"
+	);
+}
+#else
+static inline void s3c6410_onenand_write(struct s3c_onenand *onenand,
+				unsigned int addr, int count, unsigned int *buf)
+{
+	int i;
+	for (i = 0; i < count; i++)
+		s3c6410_onenand_write_cmd(*buf++, addr);
+}
+
+static inline void s3c6410_onenand_dummy_write(
+		struct s3c_onenand *onenand, unsigned int addr, int count)
+{
+	int i;
+	for (i = 0; i < count; i++)
+		s3c6410_onenand_write_cmd(0xffffffff, addr);
+}
+#endif
 
 /**
  * onenand_write - [MTD Interface] write buffer to FLASH
@@ -647,7 +815,19 @@ static int s3c_onenand_read_oob(struct mtd_info *mtd, loff_t from,
 static int s3c_onenand_write_oob(struct mtd_info *mtd, loff_t to,
 			     struct mtd_oob_ops *ops)
 {
-	return -EINVAL;
+	struct s3c_onenand *this = to_onenand(mtd);
+
+	mutex_lock(&this->lock);
+
+	writel(1, this->base + TRANS_SPARE_REG);
+
+	
+
+	writel(0, this->base + TRANS_SPARE_REG);
+
+	mutex_unlock(&this->lock);
+
+	return 0;
 }
 
 /**
@@ -674,6 +854,13 @@ static int s3c_onenand_panic_write(struct mtd_info *mtd, loff_t to, size_t len,
  */
 static void s3c_onenand_sync(struct mtd_info *mtd)
 {
+	struct s3c_onenand *this = to_onenand(mtd);
+
+	mutex_lock(&this->lock);
+
+	/* OneNAND is idle here */
+
+	mutex_unlock(&this->lock);
 }
 
 /**
@@ -686,7 +873,23 @@ static void s3c_onenand_sync(struct mtd_info *mtd)
  */
 static int s3c_onenand_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 {
-	return -EINVAL;
+	struct s3c_onenand *this = to_onenand(mtd);
+	unsigned int first, last;
+	int ret;
+
+	first = ofs >> mtd->erasesize_shift;
+	last = ((ofs + len) >> mtd->erasesize_shift) - 1;
+
+	mutex_lock(&this->lock);
+
+	s3c_onenand_map10_command(this, LOCK_START_CMD, first, 0, 0);
+	s3c_onenand_map10_command(this, LOCK_END_CMD, last, 0, 0);
+
+	ret = s3c_onenand_wait(this, INT_ACT);
+
+	mutex_unlock(&this->lock);
+
+	return ret;
 }
 
 /**
@@ -699,19 +902,23 @@ static int s3c_onenand_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
  */
 static int s3c_onenand_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
 {
-	return -EINVAL;
-}
+	struct s3c_onenand *this = to_onenand(mtd);
+	unsigned int first, last;
+	int ret;
 
-/**
- * onenand_block_isbad - [MTD Interface] Check whether the block is bad
- * @param mtd		MTD device structure
- * @param ofs		offset relative to mtd start
- *
- * Check whether the block at the given offset is bad
- */
-static int s3c_onenand_block_isbad(struct mtd_info *mtd, loff_t ofs)
-{
-	return -EINVAL;
+	first = ofs >> mtd->erasesize_shift;
+	last = ((ofs + len) >> mtd->erasesize_shift) - 1;
+
+	mutex_lock(&this->lock);
+
+	s3c_onenand_map10_command(this, UNLOCK_START_CMD, first, 0, 0);
+	s3c_onenand_map10_command(this, UNLOCK_END_CMD, last, 0, 0);
+
+	ret = s3c_onenand_wait(this, INT_ACT);
+
+	mutex_unlock(&this->lock);
+
+	return ret;
 }
 
 /**
@@ -723,7 +930,17 @@ static int s3c_onenand_block_isbad(struct mtd_info *mtd, loff_t ofs)
  */
 static int s3c_onenand_block_markbad(struct mtd_info *mtd, loff_t ofs)
 {
-	return -EINVAL;
+	struct s3c_onenand *this = to_onenand(mtd);
+	int block = ofs >> mtd->erasesize_shift;
+	struct bbm_info *bbm = this->bbm;
+
+	mutex_lock(&this->lock);
+
+	bbm->bbt[block >> 2] |= 0x01 << ((block & 0x03) << 1);
+
+	mutex_unlock(&this->lock);
+
+	return 0;
 }
 
 /**
@@ -810,6 +1027,13 @@ static int s3c_onenand_setup(struct s3c_onenand *this)
 	mtd->owner = THIS_MODULE;
 	mtd->writebufsize = mtd->writesize;
 
+	this->buffer = devm_kzalloc(this->dev,
+				mtd->writesize + mtd->oobsize, GFP_KERNEL);
+	if (!this->buffer) {
+		dev_err(this->dev, "failed to allocate data buffer\n");
+		return -ENOMEM;
+	}
+
 	return s3c_onenand_scan_bbt(mtd);
 }
 
@@ -878,8 +1102,9 @@ static int s3c_onenand_probe(struct platform_device *pdev)
 		onenand->variant = (void *)id->driver_data;
 	}
 
+	mutex_init(&onenand->lock);
+
 	mtd = &onenand->mtd;
-	mtd->priv = onenand;
 	mtd->dev.parent = &pdev->dev;
 	mtd->owner = THIS_MODULE;
 	mtd->subpage_sft = 0;
