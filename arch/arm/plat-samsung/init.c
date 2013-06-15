@@ -24,8 +24,6 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 
-#include <mach/hardware.h>
-
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 
