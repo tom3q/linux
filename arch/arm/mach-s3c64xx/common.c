@@ -198,7 +198,7 @@ void __init s3c64xx_init_io(struct map_desc *mach_desc, int size)
 	iotable_init(mach_desc, size);
 
 	/* detect cpu id */
-	s3c64xx_init_cpu();
+	s3c64xx_init_cpu(S3C_VA_SYS);
 
 	s3c_init_cpu(samsung_cpu_id, cpu_ids, ARRAY_SIZE(cpu_ids));
 

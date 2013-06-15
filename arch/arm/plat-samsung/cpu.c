@@ -15,8 +15,6 @@
 #include <linux/init.h>
 #include <linux/io.h>
 
-
-#include <mach/map.h>
 #include <plat/cpu.h>
 
 unsigned long samsung_cpu_id;
@@ -35,16 +33,16 @@ void __init s3c24xx_init_cpu(void)
 	samsung_cpu_rev = 0;
 }
 
-void __init s3c64xx_init_cpu(void)
+void __init s3c64xx_init_cpu(void __iomem *sys_base)
 {
-	samsung_cpu_id = __raw_readl(S3C_VA_SYS + 0x118);
+	samsung_cpu_id = __raw_readl(sys_base + 0x118);
 	if (!samsung_cpu_id) {
 		/*
 		 * S3C6400 has the ID register in a different place,
 		 * and needs a write before it can be read.
 		 */
-		__raw_writel(0x0, S3C_VA_SYS + 0xA1C);
-		samsung_cpu_id = __raw_readl(S3C_VA_SYS + 0xA1C);
+		__raw_writel(0x0, sys_base + 0xA1C);
+		samsung_cpu_id = __raw_readl(sys_base + 0xA1C);
 	}
 
 	samsung_cpu_rev = 0;
