@@ -3,6 +3,8 @@
 #
 # Licensed under GPLv2
 
+if ARCH_S3C64XX
+
 # temporary until we can eliminate all drivers using it.
 config PLAT_S3C64XX
 	bool
@@ -322,3 +324,5 @@ config MACH_S3C64XX_DT
 	  board.
 	  Note: This is under development and not all peripherals can be
 	  supported with this machine file.
+
+endif
