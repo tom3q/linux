@@ -4,6 +4,8 @@
 #
 # Licensed under GPLv2
 
+ccflags-$(CONFIG_ARCH_MULTIPLATFORM) += -I$(srctree)/$(src)/include
+
 obj-y				:=
 obj-m				:=
 obj-n				:= dummy.o

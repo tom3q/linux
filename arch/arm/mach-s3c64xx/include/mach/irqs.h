@@ -174,7 +174,9 @@
 
 /* Set the default NR_IRQS */
 
+#ifndef CONFIG_SPARSE_IRQ
 #define NR_IRQS	(IRQ_BOARD_END + 1)
+#endif
 
 /* Compatibility */
 

@@ -3,7 +3,44 @@
 #
 # Licensed under GPLv2
 
-if ARCH_S3C64XX
+config ARCH_S3C64XX_MULTI
+	bool "Samsung S3C64XX" if ARCH_MULTI_V6
+	select ARCH_HAS_CPUFREQ
+	select ARCH_REQUIRE_GPIOLIB
+	select ARM_VIC
+	select CPU_V6
+	select GENERIC_CLOCKEVENTS
+	select HAVE_CLK
+	select HAVE_S3C2410_I2C if I2C
+	select HAVE_S3C2410_WATCHDOG if WATCHDOG
+	select HAVE_TCM
+	select MACH_S3C64XX_DT
+	select PM_GENERIC_DOMAINS
+	select SAMSUNG_WAKEMASK
+	select SAMSUNG_WDT_RESET
+	select USB_ARCH_HAS_OHCI
+	help
+	  Support for SAMSUNG's S3C64xx series based systems
+
+if ARCH_S3C64XX_MULTI
+
+config MACH_S3C64XX_DT
+	bool
+	select CLKSRC_OF
+	select CPU_S3C6400
+	select CPU_S3C6410
+	select PINCTRL
+	select PINCTRL_S3C64XX
+	select USE_OF
+	help
+	  Machine support for Samsung S3C6400/S3C6410 using Device Tree.
+
+endif
+
+config ARCH_S3C64XX
+	bool
+	depends on ARCH_S3C64XX_ATAGS || ARCH_S3C64XX_MULTI
+	default y
 
 # Configuration options for the S3C6410 CPU
 
@@ -16,6 +53,8 @@ config CPU_S3C6410
 	bool
 	help
 	  Enable S3C6410 CPU support
+
+if ARCH_S3C64XX_ATAGS
 
 config S3C64XX_DMA
 	bool "S3C64XX DMA"
