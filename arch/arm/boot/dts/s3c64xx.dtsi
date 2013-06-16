@@ -56,6 +56,33 @@
 			#interrupt-cells = <1>;
 		};
 
+		amba {
+			compatible = "arm,amba-bus";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			dma0: dma@75000000 {
+				compatible = "arm,pl080s", "arm,primecell";
+				reg = <0x75000000 0x1000>;
+				interrupt-parent = <&vic1>;
+				interrupts = <9>;
+				clocks = <&clocks HCLK_DMA0>;
+				clock-names = "apb_pclk";
+				#dma-cells = <1>;
+			};
+
+			dma1: dma@75100000 {
+				compatible = "arm,pl080s", "arm,primecell";
+				reg = <0x75100000 0x1000>;
+				interrupt-parent = <&vic1>;
+				interrupts = <10>;
+				clocks = <&clocks HCLK_DMA1>;
+				clock-names = "apb_pclk";
+				#dma-cells = <1>;
+			};
+		};
+
 		sdhci0: sdhci@7c200000 {
 			compatible = "samsung,s3c6410-sdhci";
 			reg = <0x7c200000 0x100>;
