@@ -21,6 +21,17 @@
 
 #include "common.h"
 
+/* Add auxdata to pass platform data */
+struct of_dev_auxdata s3c64xx_auxdata_lookup[] __initdata = {
+#ifdef CONFIG_S3C64XX_PL080
+	OF_DEV_AUXDATA("arm,pl080s", 0x75000000, NULL,
+						&s3c64xx_dma0_plat_data),
+	OF_DEV_AUXDATA("arm,pl080s", 0x75100000, NULL,
+						&s3c64xx_dma1_plat_data),
+#endif
+	{}
+};
+
 /*
  * IO mapping for shared system controller IP.
  *
@@ -49,7 +60,8 @@ static void __init s3c64xx_dt_map_io(void)
 static void __init s3c64xx_dt_init_machine(void)
 {
 	samsung_wdt_reset_of_init();
-	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
+	of_platform_populate(NULL, of_default_bus_match_table,
+						s3c64xx_auxdata_lookup, NULL);
 }
 
 static void s3c64xx_dt_restart(enum reboot_mode mode, const char *cmd)
