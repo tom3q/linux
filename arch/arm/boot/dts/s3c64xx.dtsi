@@ -23,6 +23,8 @@
 	aliases {
 		i2c0 = &i2c0;
 		pinctrl0 = &pinctrl0;
+		spi0 = &spi0;
+		spi1 = &spi1;
 	};
 
 	cpus {
@@ -219,6 +221,38 @@
 				interrupts = <0>, <1>, <2>, <3>;
 				interrupt-parent = <&pctrl_int_map>;
 			};
+		};
+
+		spi0: spi@7f00b000 {
+			compatible = "samsung,s3c6410-spi";
+			reg = <0x7f00b000 0x1000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <16>;
+			clock-names = "spi", "spi_busclk0",
+				"spi_busclk1", "spi_busclk2";
+			clocks = <&clocks PCLK_SPI0>, <&clocks PCLK_SPI0>,
+				<&clocks SCLK_SPI0_48>, <&clocks SCLK_SPI0>;
+			dma-names = "tx", "rx";
+			dmas = <&dma0 12>, <&dma0 13>;
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+
+		spi1: spi@7f00c000 {
+			compatible = "samsung,s3c6410-spi";
+			reg = <0x7f00c000 0x1000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <10>;
+			clock-names = "spi", "spi_busclk0",
+				"spi_busclk1", "spi_busclk2";
+			clocks = <&clocks PCLK_SPI1>, <&clocks PCLK_SPI1>,
+				<&clocks SCLK_SPI1_48>, <&clocks SCLK_SPI1>;
+			dma-names = "tx", "rx";
+			dmas = <&dma1 4>, <&dma1 5>;
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
 		};
 	};
 };
