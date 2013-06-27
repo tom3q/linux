@@ -86,6 +86,7 @@
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/of_dma.h>
 #include <linux/pm_runtime.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -229,6 +230,7 @@ enum pl08x_dma_chan_state {
 struct pl08x_dma_chan {
 	struct virt_dma_chan vc;
 	struct pl08x_phy_chan *phychan;
+	unsigned int id;
 	const char *name;
 	const struct pl08x_channel_data *cd;
 	struct dma_slave_config cfg;
@@ -1772,6 +1774,23 @@ bool pl08x_filter_id(struct dma_chan *chan, void *chan_id)
 	return false;
 }
 
+static bool pl08x_dt_filter(struct dma_chan *chan, void *chan_id)
+{
+	struct pl08x_dma_chan *plchan;
+	u32 *id = chan_id;
+
+	/* Reject channels for devices not bound to this driver */
+	if (chan->device->dev->driver != &pl08x_amba_driver.drv)
+		return false;
+
+	plchan = to_pl08x_chan(chan);
+
+	if (plchan->id == *id)
+		return true;
+
+	return false;
+}
+
 /*
  * Just check that the device is there and active
  * TODO: turn this bit on/off depending on the number of physical channels
@@ -1884,6 +1903,7 @@ static int pl08x_dma_init_virtual_channels(struct pl08x_driver_data *pl08x,
 			return -ENOMEM;
 		}
 
+		chan->id = i;
 		chan->host = pl08x;
 		chan->state = PL08X_CHAN_IDLE;
 		chan->signal = -1;
@@ -2191,6 +2211,27 @@ static int pl08x_probe(struct amba_device *adev, const struct amba_id *id)
 		goto out_no_slave_reg;
 	}
 
+	if (adev->dev.of_node) {
+		struct of_dma_filter_info *info;
+
+		info = devm_kzalloc(&adev->dev, sizeof(*info), GFP_KERNEL);
+		if (!info)
+			goto out_no_of_alloc;
+
+		dma_cap_set(DMA_SLAVE, info->dma_cap);
+		dma_cap_set(DMA_CYCLIC, info->dma_cap);
+		info->filter_fn = pl08x_dt_filter;
+
+		ret = of_dma_controller_register(adev->dev.of_node,
+						of_dma_simple_xlate, info);
+		if (ret) {
+			dev_err(&adev->dev,
+				"%s: failed to register OF DMA controller - %d\n",
+				__func__, ret);
+			goto out_no_of_alloc;
+		}
+	}
+
 	amba_set_drvdata(adev, pl08x);
 	init_pl08x_debugfs(pl08x);
 	dev_info(&pl08x->adev->dev, "DMA: PL%03x%s rev%u at 0x%08llx irq %d\n",
@@ -2199,6 +2240,8 @@ static int pl08x_probe(struct amba_device *adev, const struct amba_id *id)
 
 	return 0;
 
+out_no_of_alloc:
+	dma_async_device_unregister(&pl08x->slave);
 out_no_slave_reg:
 	dma_async_device_unregister(&pl08x->memcpy);
 out_no_memcpy_reg:

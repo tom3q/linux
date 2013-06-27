@@ -1,0 +1,49 @@
+* ARM PrimeCell PL08x DMA Controllers
+
+The ARM PrimeCell PL08x DMA controllers can move blocks of memory contents
+between memory and peripherals or memory to memory.
+
+Required properties:
+  - compatible: should include two values:
+    - one of following:
+      - "arm,pl080" - for ARM PrimeCell PL080 DMA controller
+      - "arm,pl081" - for ARM PrimeCell PL081 DMA controller
+      - "arm,pl080s" - for Samsung-licensed ARM PL080s DMA controller
+    - and also "arm,primecell".
+  - reg: physical base address of the controller and length of memory mapped
+    region.
+  - interrupt-parent: phandle of interrupt controller,
+  - interrupts: interrupt specifier specific to interrupt controller,
+  - #dma-cells: must be <1>. used to represent the number of integer
+    cells in the dmas property of client device
+
+Optional proparties:
+  - clock-names: must contain one entry - "apb_pclk",
+  - clocks: must contain one clock specifier of DMA bus clock
+
+Example:
+
+	dma0: dma@75000000 {
+		compatible = "arm,pl080s", "arm,primecell";
+		reg = <0x75000000 0x1000>;
+		interrupt-parent = <&vic1>;
+		interrupts = <9>;
+		clocks = <&clocks HCLK_DMA0>;
+		clock-names = "apb_pclk";
+		#dma-cells = <1>;
+	};
+
+Device nodes of client devices should use simple DMA specifier format, which
+consists of two values:
+ - phandle of DMA controller,
+ - index of DMA channel.
+
+Example:
+
+	spi0: spi@7f00b000 {
+		/* ,,, */
+		dma-names = "tx", "rx";
+		dmas = <&dma0 12>, <&dma0 13>;
+		/* ... (/
+	};
+
