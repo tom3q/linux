@@ -19,6 +19,8 @@
 
 #define IS_NONCONTIG_BUFFER(f)		(f & EXYNOS_BO_NONCONTIG)
 
+struct exynos_drm_gem_g3d_priv;
+
 /*
  * exynos drm gem buffer structure.
  *
@@ -71,6 +73,7 @@ struct exynos_drm_gem_obj {
 	unsigned long			size;
 	struct vm_area_struct		*vma;
 	unsigned int			flags;
+	struct exynos_drm_gem_g3d_priv	*g3d_priv;
 };
 
 struct page **exynos_gem_get_pages(struct drm_gem_object *obj, gfp_t gfpmask);
