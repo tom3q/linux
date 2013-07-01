@@ -159,6 +159,7 @@ out:
 	/* release file pointer to gem object. */
 	drm_gem_object_release(obj);
 
+	kfree(exynos_gem_obj->g3d_priv);
 	kfree(exynos_gem_obj);
 	exynos_gem_obj = NULL;
 }
