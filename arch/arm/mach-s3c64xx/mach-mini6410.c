@@ -240,6 +240,10 @@ static struct spi_board_info spi_board_info[] = {
 	},
 };
 
+static struct platform_device mini6410_device_dma_test = {
+	.name	= "dma-test",
+};
+
 static struct platform_device *mini6410_devices[] __initdata = {
 	&mini6410_device_eth,
 	&s3c_device_hsmmc0,
@@ -251,6 +255,7 @@ static struct platform_device *mini6410_devices[] __initdata = {
 	&s3c_device_adc,
 	&s3c_device_ts,
 	&s3c64xx_device_spi0,
+	&mini6410_device_dma_test,
 };
 
 static void __init mini6410_map_io(void)
