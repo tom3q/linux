@@ -22,6 +22,7 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/dma-mapping.h>
 #include <linux/ioctl.h>
 #include <linux/fs.h>
 #include <linux/device.h>
@@ -85,6 +86,7 @@ struct spidev_data {
 	struct mutex		buf_lock;
 	unsigned		users;
 	u8			*buffer;
+	dma_addr_t		dma_addr;
 };
 
 static LIST_HEAD(device_list);
@@ -499,7 +501,9 @@ static int spidev_open(struct inode *inode, struct file *filp)
 	}
 	if (status == 0) {
 		if (!spidev->buffer) {
-			spidev->buffer = kmalloc(bufsiz, GFP_KERNEL);
+			//spidev->buffer = kmalloc(bufsiz, GFP_KERNEL);
+			spidev->buffer = dma_alloc_coherent(&spidev->spi->dev,
+					bufsiz, &spidev->dma_addr, GFP_KERNEL);
 			if (!spidev->buffer) {
 				dev_dbg(&spidev->spi->dev, "open/ENOMEM\n");
 				status = -ENOMEM;
@@ -531,7 +535,9 @@ static int spidev_release(struct inode *inode, struct file *filp)
 	if (!spidev->users) {
 		int		dofree;
 
-		kfree(spidev->buffer);
+		//kfree(spidev->buffer);
+		dma_free_coherent(&spidev->spi->dev, bufsiz,
+					spidev->buffer, spidev->dma_addr);
 		spidev->buffer = NULL;
 
 		/* ... after we unbound from the underlying device? */
@@ -588,6 +594,7 @@ static int spidev_probe(struct spi_device *spi)
 	spidev->spi = spi;
 	spin_lock_init(&spidev->spi_lock);
 	mutex_init(&spidev->buf_lock);
+	dma_set_coherent_mask(&spi->dev, DMA_BIT_MASK(32));
 
 	INIT_LIST_HEAD(&spidev->device_entry);
 
