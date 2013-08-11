@@ -22,6 +22,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/serial_core.h>
+#include <linux/spi/spi.h>
 #include <linux/types.h>
 
 #include <asm/mach-types.h>
@@ -39,6 +40,7 @@
 #include <linux/platform_data/mmc-sdhci-s3c.h>
 #include <plat/regs-serial.h>
 #include <plat/sdhci.h>
+#include <linux/platform_data/spi-s3c64xx.h>
 #include <linux/platform_data/touchscreen-s3c2410.h>
 #include <linux/platform_data/gpio-samsung-s3c64xx.h>
 
@@ -224,6 +226,20 @@ static struct s3c_sdhci_platdata mini6410_hsmmc1_pdata = {
 	.ext_cd_gpio_invert	= true,
 };
 
+static struct s3c64xx_spi_csinfo spidev_csinfo = {
+	.line = S3C64XX_GPC(3),
+};
+
+static struct spi_board_info spi_board_info[] = {
+	{
+		.modalias = "spidev",
+		.max_speed_hz = 1000000,
+		.bus_num = 0,
+		.chip_select = 0,
+		.controller_data = &spidev_csinfo,
+	},
+};
+
 static struct platform_device *mini6410_devices[] __initdata = {
 	&mini6410_device_eth,
 	&s3c_device_hsmmc0,
@@ -234,6 +250,7 @@ static struct platform_device *mini6410_devices[] __initdata = {
 	&mini6410_lcd_powerdev,
 	&s3c_device_adc,
 	&s3c_device_ts,
+	&s3c64xx_device_spi0,
 };
 
 static void __init mini6410_map_io(void)
@@ -333,6 +350,8 @@ static void __init mini6410_machine_init(void)
 	s3c_fb_set_platdata(&mini6410_lcd_pdata[features.lcd_index]);
 	s3c_sdhci1_set_platdata(&mini6410_hsmmc1_pdata);
 	s3c24xx_ts_set_platdata(NULL);
+	s3c64xx_spi0_set_platdata(NULL, 0, 1);
+	spi_register_board_info(spi_board_info, ARRAY_SIZE(spi_board_info));
 
 	/* configure nCS1 width to 16 bits */
 
