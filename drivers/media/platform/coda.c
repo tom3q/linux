@@ -136,6 +136,7 @@ struct coda_dev {
 	void __iomem		*regs_base;
 	struct clk		*clk_per;
 	struct clk		*clk_ahb;
+	struct clk		*clk_spec;
 
 	struct coda_aux_buf	codebuf;
 	struct coda_aux_buf	tempbuf;
@@ -2491,6 +2492,8 @@ static int coda_open(struct file *file)
 	list_add(&ctx->list, &dev->instances);
 	coda_unlock(ctx);
 
+	if (!IS_ERR(dev->clk_spec))
+		clk_prepare_enable(dev->clk_spec);
 	v4l2_dbg(1, coda_debug, &dev->v4l2_dev, "Created instance %d (%p)\n",
 		 ctx->idx, ctx);
 
@@ -2555,6 +2558,8 @@ static int coda_release(struct file *file)
 
 	coda_free_aux_buf(dev, &ctx->parabuf);
 	v4l2_ctrl_handler_free(&ctx->ctrls);
+	if (!IS_ERR(dev->clk_spec))
+		clk_disable_unprepare(dev->clk_spec);
 	clk_disable_unprepare(dev->clk_ahb);
 	clk_disable_unprepare(dev->clk_per);
 	v4l2_fh_del(&ctx->fh);
@@ -2927,6 +2932,12 @@ static int coda_hw_init(struct coda_dev *dev)
 	if (ret)
 		goto err_clk_ahb;
 
+	if (!IS_ERR(dev->clk_spec)) {
+		ret = clk_prepare_enable(dev->clk_spec);
+		if (ret)
+			goto err_clk_spec;
+	}
+
 	/*
 	 * Copy the first CODA_ISRAM_SIZE in the internal SRAM.
 	 * The 16-bit chars in the code buffer are in memory access
@@ -2998,6 +3009,8 @@ static int coda_hw_init(struct coda_dev *dev)
 	coda_write(dev, 0, CODA_REG_BIT_RUN_COD_STD);
 	coda_write(dev, CODA_COMMAND_FIRMWARE_GET, CODA_REG_BIT_RUN_COMMAND);
 	if (coda_wait_timeout(dev)) {
+		if (!IS_ERR(dev->clk_spec))
+			clk_disable_unprepare(dev->clk_spec);
 		clk_disable_unprepare(dev->clk_per);
 		clk_disable_unprepare(dev->clk_ahb);
 		v4l2_err(&dev->v4l2_dev, "firmware get command error\n");
@@ -3011,6 +3024,8 @@ static int coda_hw_init(struct coda_dev *dev)
 	minor = CODA_FIRMWARE_MINOR(data);
 	release = CODA_FIRMWARE_RELEASE(data);
 
+	if (!IS_ERR(dev->clk_spec))
+		clk_disable_unprepare(dev->clk_spec);
 	clk_disable_unprepare(dev->clk_per);
 	clk_disable_unprepare(dev->clk_ahb);
 
@@ -3035,6 +3050,8 @@ static int coda_hw_init(struct coda_dev *dev)
 
 	return 0;
 
+err_clk_spec:
+	clk_disable_unprepare(dev->clk_ahb);
 err_clk_ahb:
 	clk_disable_unprepare(dev->clk_per);
 	return ret;
@@ -3187,6 +3204,8 @@ static int coda_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Could not get ahb clock\n");
 		return PTR_ERR(dev->clk_ahb);
 	}
+
+	dev->clk_spec = devm_clk_get(&pdev->dev, "special");
 
 	/* Get  memory for physical registers */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
