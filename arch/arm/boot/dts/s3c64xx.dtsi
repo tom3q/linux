@@ -115,6 +115,17 @@
 			status = "disabled";
 		};
 
+		mfc: video-codec@7e002000 {
+			compatible = "samsung,s3c6400-mfc";
+			reg = <0x7e002000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <16>;
+			clocks = <&clocks PCLK_MFC>, <&clocks HCLK_MFC>,
+					<&clocks SCLK_MFC>;
+			clock-names = "per", "ahb", "special";
+			samsung,power-domain = <&domain_v>;
+		};
+
 		watchdog: watchdog@7e004000 {
 			compatible = "samsung,s3c2410-wdt";
 			reg = <0x7e004000 0x1000>;
