@@ -3206,6 +3206,8 @@ static int coda_probe(struct platform_device *pdev)
 	}
 
 	dev->clk_spec = devm_clk_get(&pdev->dev, "special");
+	if (!IS_ERR(dev->clk_spec))
+		clk_set_rate(dev->clk_spec, 133000000);
 
 	/* Get  memory for physical registers */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
