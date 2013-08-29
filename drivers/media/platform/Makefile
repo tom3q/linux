@@ -24,6 +24,7 @@ obj-$(CONFIG_VIDEO_MEM2MEM_TESTDEV) += mem2mem_testdev.o
 
 obj-$(CONFIG_VIDEO_MX2_EMMAPRP)		+= mx2_emmaprp.o
 obj-$(CONFIG_VIDEO_CODA) 		+= coda.o
+obj-$(CONFIG_VIDEO_SAMSUNG_S3C_PP)	+= s3c-pp.o
 
 obj-$(CONFIG_VIDEO_SH_VEU)		+= sh_veu.o
 
