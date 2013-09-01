@@ -1390,7 +1390,7 @@ static void coda_buf_queue(struct vb2_buffer *vb)
 	 * In the decoder case, immediately try to copy the buffer into the
 	 * bitstream ringbuffer and mark it as ready to be dequeued.
 	 */
-	if (q_data->fmt->fourcc == V4L2_PIX_FMT_H264 &&
+	if (!coda_format_is_yuv(q_data->fmt) &&
 	    vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
 		/*
 		 * For backwards compatiblity, queuing an empty buffer marks
@@ -1939,7 +1939,7 @@ static int coda_start_streaming(struct vb2_queue *q, unsigned int count)
 
 	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
 	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
-		if (q_data_src->fmt->fourcc == V4L2_PIX_FMT_H264) {
+		if (!coda_format_is_yuv(q_data_src->fmt)) {
 			if (coda_get_bitstream_payload(ctx) < 512)
 				return -EINVAL;
 		} else {
