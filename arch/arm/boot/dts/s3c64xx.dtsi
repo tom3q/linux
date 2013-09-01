@@ -56,6 +56,20 @@
 			#interrupt-cells = <1>;
 		};
 
+		pp: video-processor@77000000 {
+			compatible = "samsung,s3c6400-pp";
+			reg = <0x77000000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <9>;
+			clocks = <&clocks HCLK_POST0>,
+					<&clocks HCLK_POST0>,
+					<&clocks SCLK_POST0>,
+					<&clocks SCLK_POST0_27>;
+			clock-names = "bus_clk", "vid_clk0", "vid_clk1",
+					"vid_clk3";
+			samsung,power-domain = <&domain_f>;
+		};
+
 		fimd: display@77100000 {
 			compatible = "samsung,s3c6400-fimd";
 			reg = <0x77100000 0x1000>;
