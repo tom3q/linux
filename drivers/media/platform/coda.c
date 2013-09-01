@@ -89,6 +89,7 @@ enum coda_product {
 };
 
 #define CODA_FMT_BITSTREAM	(1 << 0)
+#define CODA_FMT_YVU		(1 << 1)
 
 struct coda_fmt {
 	char *name;
@@ -321,7 +322,7 @@ static struct coda_fmt coda_formats[] = {
 	{
 		.name = "YUV 4:2:0 Planar, YCrCb",
 		.fourcc = V4L2_PIX_FMT_YVU420,
-		.flags = 0,
+		.flags = CODA_FMT_YVU,
 	},
 	{
 		.name = "H264 Encoded Stream",
@@ -338,6 +339,11 @@ static struct coda_fmt coda_formats[] = {
 static inline bool coda_format_is_yuv(const struct coda_fmt *fmt)
 {
 	return !(fmt->flags & CODA_FMT_BITSTREAM);
+}
+
+static inline bool coda_format_is_yvu(const struct coda_fmt *fmt)
+{
+	return !!(fmt->flags & CODA_FMT_YVU);
 }
 
 #define CODA_CODEC(mode, src_fourcc, dst_fourcc, max_w, max_h) \
@@ -1029,7 +1035,7 @@ static int coda_prepare_decode(struct coda_ctx *ctx)
 
 	/* Set rotator output */
 	picture_y = vb2_dma_contig_plane_dma_addr(dst_buf, 0);
-	if (q_data_dst->fmt->fourcc == V4L2_PIX_FMT_YVU420) {
+	if (coda_format_is_yvu(q_data_dst->fmt)) {
 		/* Switch Cr and Cb for YVU420 format */
 		picture_cr = picture_y + stridey * height;
 		picture_cb = picture_cr + stridey / 2 * height / 2;
@@ -1157,19 +1163,15 @@ static void coda_prepare_encode(struct coda_ctx *ctx)
 
 
 	picture_y = vb2_dma_contig_plane_dma_addr(src_buf, 0);
-	switch (q_data_src->fmt->fourcc) {
-	case V4L2_PIX_FMT_YVU420:
+	if (coda_format_is_yvu(q_data_src->fmt)) {
 		/* Switch Cb and Cr for YVU420 format */
 		picture_cr = picture_y + q_data_src->width * q_data_src->height;
 		picture_cb = picture_cr + q_data_src->width / 2 *
 				q_data_src->height / 2;
-		break;
-	case V4L2_PIX_FMT_YUV420:
-	default:
+	} else {
 		picture_cb = picture_y + q_data_src->width * q_data_src->height;
 		picture_cr = picture_cb + q_data_src->width / 2 *
 				q_data_src->height / 2;
-		break;
 	}
 
 	coda_write(dev, picture_y, CODA_CMD_ENC_PIC_SRC_ADDR_Y);
