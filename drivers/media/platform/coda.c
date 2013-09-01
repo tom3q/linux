@@ -88,9 +88,12 @@ enum coda_product {
 	CODA_7541 = 0xf012,
 };
 
+#define CODA_FMT_BITSTREAM	(1 << 0)
+
 struct coda_fmt {
 	char *name;
 	u32 fourcc;
+	u32 flags;
 };
 
 struct coda_codec {
@@ -313,20 +316,29 @@ static struct coda_fmt coda_formats[] = {
 	{
 		.name = "YUV 4:2:0 Planar, YCbCr",
 		.fourcc = V4L2_PIX_FMT_YUV420,
+		.flags = 0,
 	},
 	{
 		.name = "YUV 4:2:0 Planar, YCrCb",
 		.fourcc = V4L2_PIX_FMT_YVU420,
+		.flags = 0,
 	},
 	{
 		.name = "H264 Encoded Stream",
 		.fourcc = V4L2_PIX_FMT_H264,
+		.flags = CODA_FMT_BITSTREAM,
 	},
 	{
 		.name = "MPEG4 Encoded Stream",
 		.fourcc = V4L2_PIX_FMT_MPEG4,
+		.flags = CODA_FMT_BITSTREAM,
 	},
 };
+
+static inline bool coda_format_is_yuv(const struct coda_fmt *fmt)
+{
+	return !(fmt->flags & CODA_FMT_BITSTREAM);
+}
 
 #define CODA_CODEC(mode, src_fourcc, dst_fourcc, max_w, max_h) \
 	{ mode, src_fourcc, dst_fourcc, max_w, max_h }
@@ -349,17 +361,6 @@ static struct coda_codec coda7_codecs[] = {
 	CODA_CODEC(CODA7_MODE_DECODE_H264, V4L2_PIX_FMT_H264,   V4L2_PIX_FMT_YUV420, 1920, 1080),
 	CODA_CODEC(CODA7_MODE_DECODE_MP4,  V4L2_PIX_FMT_MPEG4,  V4L2_PIX_FMT_YUV420, 1920, 1080),
 };
-
-static bool coda_format_is_yuv(const struct coda_fmt *fmt)
-{
-	switch (fmt->fourcc) {
-	case V4L2_PIX_FMT_YUV420:
-	case V4L2_PIX_FMT_YVU420:
-		return true;
-	default:
-		return false;
-	}
-}
 
 /*
  * Normalize all supported YUV 4:2:0 formats to the value used in the codec
