@@ -92,6 +92,7 @@ enum coda_product {
 
 #define CODA_FMT_BITSTREAM	(1 << 0)
 #define CODA_FMT_YVU		(1 << 1)
+#define CODA_FMT_MPLANE		(1 << 2)
 
 struct coda_fmt {
 	char *name;
@@ -115,12 +116,15 @@ struct coda_devtype {
 	size_t			workbuf_size;
 };
 
+#define CODA_NUM_PLANES		3
+
 /* Per-queue, driver-specific private data */
 struct coda_q_data {
 	unsigned int		width;
 	unsigned int		height;
-	unsigned int		sizeimage;
+	unsigned int		sizeimage[CODA_NUM_PLANES];
 	const struct coda_fmt	*fmt;
+	u8			num_planes;
 };
 
 struct coda_aux_buf {
@@ -305,9 +309,9 @@ static struct coda_q_data *get_q_data(struct coda_ctx *ctx,
 					 enum v4l2_buf_type type)
 {
 	switch (type) {
-	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
+	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		return &(ctx->q_data[V4L2_M2M_SRC]);
-	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
 		return &(ctx->q_data[V4L2_M2M_DST]);
 	default:
 		BUG();
@@ -338,6 +342,16 @@ static struct coda_fmt coda_formats[] = {
 		.flags = CODA_FMT_YVU,
 	},
 	{
+		.name = "YUV 4:2:0 Multiplanar, YCbCr",
+		.fourcc = V4L2_PIX_FMT_YUV420M,
+		.flags = CODA_FMT_MPLANE,
+	},
+	{
+		.name = "YUV 4:2:0 Multiplanar, YCrCb",
+		.fourcc = V4L2_PIX_FMT_YVU420M,
+		.flags = CODA_FMT_YVU | CODA_FMT_MPLANE,
+	},
+	{
 		.name = "H264 Encoded Stream",
 		.fourcc = V4L2_PIX_FMT_H264,
 		.flags = CODA_FMT_BITSTREAM,
@@ -357,6 +371,11 @@ static inline bool coda_format_is_yuv(const struct coda_fmt *fmt)
 static inline bool coda_format_is_yvu(const struct coda_fmt *fmt)
 {
 	return !!(fmt->flags & CODA_FMT_YVU);
+}
+
+static inline bool coda_format_is_mplane(const struct coda_fmt *fmt)
+{
+	return !!(fmt->flags & CODA_FMT_MPLANE);
 }
 
 #define CODA_CODEC(mode, src_fourcc, dst_fourcc, max_w, max_h) \
@@ -444,8 +463,9 @@ static int vidioc_querycap(struct file *file, void *priv,
 	 * device capability flags are left only for backward compatibility
 	 * and are scheduled for removal.
 	 */
-	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_OUTPUT |
-			   V4L2_CAP_VIDEO_M2M | V4L2_CAP_STREAMING;
+	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE_MPLANE |
+				V4L2_CAP_VIDEO_OUTPUT_MPLANE |
+				V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
 	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
 
 	return 0;
@@ -475,11 +495,11 @@ static int enum_fmt(void *priv, struct v4l2_fmtdesc *f,
 		/* Compressed formats may be supported, check the codec list */
 		for (k = 0; k < num_codecs; k++) {
 			/* if src_fourcc is set, only consider matching codecs */
-			if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+			if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
 			    formats[i].fourcc == codecs[k].dst_fourcc &&
 			    (!src_fourcc || src_fourcc == codecs[k].src_fourcc))
 				break;
-			if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT &&
+			if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
 			    formats[i].fourcc == codecs[k].src_fourcc)
 				break;
 		}
@@ -509,9 +529,9 @@ static int vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
 	struct coda_q_data *q_data_src;
 
 	/* If the source format is already fixed, only list matching formats */
-	src_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+	src_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	if (vb2_is_streaming(src_vq)) {
-		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 
 		return enum_fmt(priv, f, f->type, q_data_src->fmt);
 	}
@@ -537,17 +557,30 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 
 	q_data = get_q_data(ctx, f->type);
 
-	f->fmt.pix.field	= V4L2_FIELD_NONE;
-	f->fmt.pix.pixelformat	= q_data->fmt->fourcc;
-	f->fmt.pix.width	= q_data->width;
-	f->fmt.pix.height	= q_data->height;
-	if (coda_format_is_yuv(q_data->fmt))
-		f->fmt.pix.bytesperline = round_up(f->fmt.pix.width, 2);
-	else /* encoded formats h.264/mpeg4 */
-		f->fmt.pix.bytesperline = 0;
+	f->fmt.pix_mp.field	= V4L2_FIELD_NONE;
+	f->fmt.pix_mp.pixelformat	= q_data->fmt->fourcc;
+	f->fmt.pix_mp.width	= q_data->width;
+	f->fmt.pix_mp.height	= q_data->height;
+	f->fmt.pix_mp.num_planes = q_data->num_planes;
+	if (coda_format_is_yuv(q_data->fmt)) {
+		int i;
 
-	f->fmt.pix.sizeimage	= q_data->sizeimage;
-	f->fmt.pix.colorspace	= ctx->colorspace;
+		f->fmt.pix_mp.plane_fmt[0].bytesperline =
+					round_up(f->fmt.pix_mp.width, 2);
+		f->fmt.pix_mp.plane_fmt[0].sizeimage = q_data->sizeimage[0];
+
+		for (i = 1; i < f->fmt.pix_mp.num_planes; ++i) {
+			f->fmt.pix_mp.plane_fmt[i].bytesperline =
+					round_up(f->fmt.pix_mp.width / 2, 2);
+			f->fmt.pix_mp.plane_fmt[i].sizeimage =
+					q_data->sizeimage[i];
+		}
+	} else { /* encoded formats h.264/mpeg4 */
+		f->fmt.pix_mp.plane_fmt[0].bytesperline = 0;
+		f->fmt.pix_mp.plane_fmt[0].sizeimage = q_data->sizeimage[0];
+	}
+
+	f->fmt.pix_mp.colorspace	= ctx->colorspace;
 
 	return 0;
 }
@@ -558,7 +591,7 @@ static int vidioc_try_fmt(struct coda_codec *codec, struct v4l2_format *f,
 	unsigned int max_w, max_h;
 	enum v4l2_field field;
 
-	field = f->fmt.pix.field;
+	field = f->fmt.pix_mp.field;
 	if (field == V4L2_FIELD_ANY)
 		field = V4L2_FIELD_NONE;
 	else if (V4L2_FIELD_NONE != field)
@@ -566,7 +599,7 @@ static int vidioc_try_fmt(struct coda_codec *codec, struct v4l2_format *f,
 
 	/* V4L2 specification suggests the driver corrects the format struct
 	 * if any of the dimensions is unsupported */
-	f->fmt.pix.field = field;
+	f->fmt.pix_mp.field = field;
 
 	if (codec) {
 		max_w = codec->max_w;
@@ -575,18 +608,41 @@ static int vidioc_try_fmt(struct coda_codec *codec, struct v4l2_format *f,
 		max_w = MAX_W;
 		max_h = MAX_H;
 	}
-	v4l_bound_align_image(&f->fmt.pix.width, MIN_W, max_w,
-			      W_ALIGN, &f->fmt.pix.height,
+	v4l_bound_align_image(&f->fmt.pix_mp.width, MIN_W, max_w,
+			      W_ALIGN, &f->fmt.pix_mp.height,
 			      MIN_H, max_h, H_ALIGN, S_ALIGN);
 
+	if (coda_format_is_mplane(fmt))
+		f->fmt.pix_mp.num_planes = CODA_NUM_PLANES;
+	else
+		f->fmt.pix_mp.num_planes = 1;
+
 	if (coda_format_is_yuv(fmt)) {
+		int i;
+
 		/* Frame stride must be multiple of 8 */
-		f->fmt.pix.bytesperline = round_up(f->fmt.pix.width, 8);
-		f->fmt.pix.sizeimage = f->fmt.pix.bytesperline *
-					f->fmt.pix.height * 3 / 2;
+		f->fmt.pix_mp.plane_fmt[0].bytesperline =
+				round_up(f->fmt.pix_mp.width, 8);
+
+		if (coda_format_is_mplane(fmt))
+			f->fmt.pix_mp.plane_fmt[0].sizeimage =
+				f->fmt.pix_mp.plane_fmt[0].bytesperline *
+				f->fmt.pix_mp.height;
+		else
+			f->fmt.pix_mp.plane_fmt[0].sizeimage =
+				f->fmt.pix_mp.plane_fmt[0].bytesperline *
+				f->fmt.pix_mp.height * 3 / 2;
+
+		for (i = 1; i < f->fmt.pix_mp.num_planes; ++i) {
+			f->fmt.pix_mp.plane_fmt[i].bytesperline =
+				round_up(f->fmt.pix_mp.width / 2, 4);
+			f->fmt.pix_mp.plane_fmt[i].sizeimage =
+				f->fmt.pix_mp.plane_fmt[i].bytesperline *
+				f->fmt.pix_mp.height / 2;
+		}
 	} else { /*encoded formats h.264/mpeg4 */
-		f->fmt.pix.bytesperline = 0;
-		f->fmt.pix.sizeimage = CODA_MAX_FRAME_SIZE;
+		f->fmt.pix_mp.plane_fmt[0].bytesperline = 0;
+		f->fmt.pix_mp.plane_fmt[0].sizeimage = CODA_MAX_FRAME_SIZE;
 	}
 
 	return 0;
@@ -612,19 +668,18 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	const struct coda_fmt *dst_fmt;
 	struct coda_codec *codec;
 	struct vb2_queue *src_vq;
-	int ret;
 
-	dst_fmt = coda_find_format(f->fmt.pix.pixelformat);
+	dst_fmt = coda_find_format(f->fmt.pix_mp.pixelformat);
 
 	/*
 	 * If the source format is already fixed, try to find a codec that
 	 * converts to the given destination format
 	 */
-	src_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+	src_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	if (vb2_is_streaming(src_vq)) {
 		struct coda_q_data *q_data_src;
 
-		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 		codec = coda_find_codec(ctx->dev, q_data_src->fmt, dst_fmt);
 		if (!codec)
 			return -EINVAL;
@@ -633,22 +688,15 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 		codec = coda_find_codec(ctx->dev, NULL, dst_fmt);
 	}
 
-	f->fmt.pix.colorspace = ctx->colorspace;
-
-	ret = vidioc_try_fmt(codec, f, dst_fmt);
-	if (ret < 0)
-		return ret;
+	f->fmt.pix_mp.colorspace = ctx->colorspace;
 
 	/* The h.264 decoder only returns complete 16x16 macroblocks */
 	if (codec && codec->src_fourcc == V4L2_PIX_FMT_H264) {
-		f->fmt.pix.width = round_up(f->fmt.pix.width, 16);
-		f->fmt.pix.height = round_up(f->fmt.pix.height, 16);
-		f->fmt.pix.bytesperline = f->fmt.pix.width;
-		f->fmt.pix.sizeimage = f->fmt.pix.bytesperline *
-				       f->fmt.pix.height * 3 / 2;
+		f->fmt.pix_mp.width = round_up(f->fmt.pix_mp.width, 16);
+		f->fmt.pix_mp.height = round_up(f->fmt.pix_mp.height, 16);
 	}
 
-	return 0;
+	return vidioc_try_fmt(codec, f, dst_fmt);
 }
 
 static int vidioc_try_fmt_vid_out(struct file *file, void *priv,
@@ -658,15 +706,15 @@ static int vidioc_try_fmt_vid_out(struct file *file, void *priv,
 	const struct coda_fmt *src_fmt;
 	struct coda_codec *codec;
 
-	src_fmt = coda_find_format(f->fmt.pix.pixelformat);
+	src_fmt = coda_find_format(f->fmt.pix_mp.pixelformat);
 	if (!src_fmt)
 		return -EINVAL;
 
 	/* Determine codec by encoded format, returns NULL if raw or invalid */
 	codec = coda_find_codec(ctx->dev, src_fmt, NULL);
 
-	if (!f->fmt.pix.colorspace)
-		f->fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
+	if (!f->fmt.pix_mp.colorspace)
+		f->fmt.pix_mp.colorspace = V4L2_COLORSPACE_REC709;
 
 	return vidioc_try_fmt(codec, f, src_fmt);
 }
@@ -676,6 +724,7 @@ static int vidioc_s_fmt(struct coda_ctx *ctx, struct v4l2_format *f,
 {
 	struct coda_q_data *q_data;
 	struct vb2_queue *vq;
+	int i;
 
 	vq = v4l2_m2m_get_vq(ctx->m2m_ctx, f->type);
 	if (!vq)
@@ -691,9 +740,12 @@ static int vidioc_s_fmt(struct coda_ctx *ctx, struct v4l2_format *f,
 	}
 
 	q_data->fmt = fmt;
-	q_data->width = f->fmt.pix.width;
-	q_data->height = f->fmt.pix.height;
-	q_data->sizeimage = f->fmt.pix.sizeimage;
+	q_data->width = f->fmt.pix_mp.width;
+	q_data->height = f->fmt.pix_mp.height;
+	q_data->num_planes = f->fmt.pix_mp.num_planes;
+
+	for (i = 0; i < f->fmt.pix_mp.num_planes; ++i)
+		q_data->sizeimage[i] = f->fmt.pix_mp.plane_fmt[i].sizeimage;
 
 	v4l2_dbg(1, coda_debug, &ctx->dev->v4l2_dev,
 		"Setting format for type %d, wxh: %dx%d, fmt: %d\n",
@@ -709,7 +761,7 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 	const struct coda_fmt *fmt;
 	int ret;
 
-	fmt = coda_find_format(f->fmt.pix.pixelformat);
+	fmt = coda_find_format(f->fmt.pix_mp.pixelformat);
 
 	ret = vidioc_try_fmt_vid_cap(file, priv, f);
 	if (ret)
@@ -725,7 +777,7 @@ static int vidioc_s_fmt_vid_out(struct file *file, void *priv,
 	const struct coda_fmt *fmt;
 	int ret;
 
-	fmt = coda_find_format(f->fmt.pix.pixelformat);
+	fmt = coda_find_format(f->fmt.pix_mp.pixelformat);
 
 	ret = vidioc_try_fmt_vid_out(file, priv, f);
 	if (ret)
@@ -733,7 +785,7 @@ static int vidioc_s_fmt_vid_out(struct file *file, void *priv,
 
 	ret = vidioc_s_fmt(ctx, f, fmt);
 	if (ret)
-		ctx->colorspace = f->fmt.pix.colorspace;
+		ctx->colorspace = f->fmt.pix_mp.colorspace;
 
 	return ret;
 }
@@ -774,7 +826,7 @@ static bool coda_buf_is_end_of_stream(struct coda_ctx *ctx,
 {
 	struct vb2_queue *src_vq;
 
-	src_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+	src_vq = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 
 	return ((ctx->bit_stream_param & coda_bit_stream_end_flag(ctx->dev)) &&
 		(buf->sequence == (ctx->qsequence - 1)));
@@ -788,7 +840,7 @@ static int vidioc_dqbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 	ret = v4l2_m2m_dqbuf(file, ctx->m2m_ctx, buf);
 
 	/* If this is the last capture buffer, emit an end-of-stream event */
-	if (buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE &&
+	if (buf->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
 	    coda_buf_is_end_of_stream(ctx, buf)) {
 		const struct v4l2_event eos_event = {
 			.type = V4L2_EVENT_EOS
@@ -872,15 +924,15 @@ static int vidioc_subscribe_event(struct v4l2_fh *fh,
 static const struct v4l2_ioctl_ops coda_ioctl_ops = {
 	.vidioc_querycap	= vidioc_querycap,
 
-	.vidioc_enum_fmt_vid_cap = vidioc_enum_fmt_vid_cap,
-	.vidioc_g_fmt_vid_cap	= vidioc_g_fmt,
-	.vidioc_try_fmt_vid_cap	= vidioc_try_fmt_vid_cap,
-	.vidioc_s_fmt_vid_cap	= vidioc_s_fmt_vid_cap,
+	.vidioc_enum_fmt_vid_cap_mplane = vidioc_enum_fmt_vid_cap,
+	.vidioc_g_fmt_vid_cap_mplane = vidioc_g_fmt,
+	.vidioc_try_fmt_vid_cap_mplane = vidioc_try_fmt_vid_cap,
+	.vidioc_s_fmt_vid_cap_mplane = vidioc_s_fmt_vid_cap,
 
-	.vidioc_enum_fmt_vid_out = vidioc_enum_fmt_vid_out,
-	.vidioc_g_fmt_vid_out	= vidioc_g_fmt,
-	.vidioc_try_fmt_vid_out	= vidioc_try_fmt_vid_out,
-	.vidioc_s_fmt_vid_out	= vidioc_s_fmt_vid_out,
+	.vidioc_enum_fmt_vid_out_mplane = vidioc_enum_fmt_vid_out,
+	.vidioc_g_fmt_vid_out_mplane = vidioc_g_fmt,
+	.vidioc_try_fmt_vid_out_mplane = vidioc_try_fmt_vid_out,
+	.vidioc_s_fmt_vid_out_mplane = vidioc_s_fmt_vid_out,
 
 	.vidioc_reqbufs		= vidioc_reqbufs,
 	.vidioc_querybuf	= vidioc_querybuf,
@@ -1021,7 +1073,7 @@ static int coda_prepare_decode(struct coda_ctx *ctx)
 	u32 picture_y, picture_cb, picture_cr;
 
 	dst_buf = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
-	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 
 	if (ctx->params.rot_mode & CODA_ROT_90) {
 		stridey = q_data_dst->height;
@@ -1059,13 +1111,24 @@ static int coda_prepare_decode(struct coda_ctx *ctx)
 
 	/* Set rotator output */
 	picture_y = vb2_dma_contig_plane_dma_addr(dst_buf, 0);
-	if (coda_format_is_yvu(q_data_dst->fmt)) {
-		/* Switch Cr and Cb for YVU420 format */
-		picture_cr = picture_y + stridey * height;
-		picture_cb = picture_cr + stridey / 2 * height / 2;
+	if (coda_format_is_mplane(q_data_dst->fmt)) {
+		if (coda_format_is_yvu(q_data_dst->fmt)) {
+			/* Switch Cr and Cb for YVU420 format */
+			picture_cr = vb2_dma_contig_plane_dma_addr(dst_buf, 1);
+			picture_cb = vb2_dma_contig_plane_dma_addr(dst_buf, 2);
+		} else {
+			picture_cb = vb2_dma_contig_plane_dma_addr(dst_buf, 1);
+			picture_cr = vb2_dma_contig_plane_dma_addr(dst_buf, 2);
+		}
 	} else {
-		picture_cb = picture_y + stridey * height;
-		picture_cr = picture_cb + stridey / 2 * height / 2;
+		if (coda_format_is_yvu(q_data_dst->fmt)) {
+			/* Switch Cr and Cb for YVU420 format */
+			picture_cr = picture_y + stridey * height;
+			picture_cb = picture_cr + stridey / 2 * height / 2;
+		} else {
+			picture_cb = picture_y + stridey * height;
+			picture_cr = picture_cb + stridey / 2 * height / 2;
+		}
 	}
 	coda_write(dev, picture_y, CODA_CMD_DEC_PIC_ROT_ADDR_Y);
 	coda_write(dev, picture_cb, CODA_CMD_DEC_PIC_ROT_ADDR_CB);
@@ -1116,8 +1179,8 @@ static void coda_prepare_encode(struct coda_ctx *ctx)
 
 	src_buf = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
 	dst_buf = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
-	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
-	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	dst_fourcc = q_data_dst->fmt->fourcc;
 
 	src_buf->v4l2_buf.sequence = ctx->osequence;
@@ -1200,15 +1263,28 @@ static void coda_prepare_encode(struct coda_ctx *ctx)
 
 
 	picture_y = vb2_dma_contig_plane_dma_addr(src_buf, 0);
-	if (coda_format_is_yvu(q_data_src->fmt)) {
-		/* Switch Cb and Cr for YVU420 format */
-		picture_cr = picture_y + q_data_src->width * q_data_src->height;
-		picture_cb = picture_cr + q_data_src->width / 2 *
-				q_data_src->height / 2;
+	if (coda_format_is_mplane(q_data_dst->fmt)) {
+		if (coda_format_is_yvu(q_data_dst->fmt)) {
+			/* Switch Cr and Cb for YVU420 format */
+			picture_cr = vb2_dma_contig_plane_dma_addr(dst_buf, 1);
+			picture_cb = vb2_dma_contig_plane_dma_addr(dst_buf, 2);
+		} else {
+			picture_cb = vb2_dma_contig_plane_dma_addr(dst_buf, 1);
+			picture_cr = vb2_dma_contig_plane_dma_addr(dst_buf, 2);
+		}
 	} else {
-		picture_cb = picture_y + q_data_src->width * q_data_src->height;
-		picture_cr = picture_cb + q_data_src->width / 2 *
-				q_data_src->height / 2;
+		if (coda_format_is_yvu(q_data_src->fmt)) {
+			/* Switch Cb and Cr for YVU420 format */
+			picture_cr = picture_y + q_data_src->width *
+					q_data_src->height;
+			picture_cb = picture_cr + q_data_src->width / 2 *
+					q_data_src->height / 2;
+		} else {
+			picture_cb = picture_y + q_data_src->width *
+					q_data_src->height;
+			picture_cr = picture_cb + q_data_src->width / 2 *
+					q_data_src->height / 2;
+		}
 	}
 
 	coda_write(dev, picture_y, CODA_CMD_ENC_PIC_SRC_ADDR_Y);
@@ -1366,10 +1442,12 @@ static void set_default_params(struct coda_ctx *ctx)
 				coda_find_format(ctx->codec->dst_fourcc);
 	ctx->q_data[V4L2_M2M_SRC].width = max_w;
 	ctx->q_data[V4L2_M2M_SRC].height = max_h;
-	ctx->q_data[V4L2_M2M_SRC].sizeimage = (max_w * max_h * 3) / 2;
+	ctx->q_data[V4L2_M2M_SRC].sizeimage[0] = (max_w * max_h * 3) / 2;
+	ctx->q_data[V4L2_M2M_SRC].num_planes = 1;
 	ctx->q_data[V4L2_M2M_DST].width = max_w;
 	ctx->q_data[V4L2_M2M_DST].height = max_h;
-	ctx->q_data[V4L2_M2M_DST].sizeimage = CODA_MAX_FRAME_SIZE;
+	ctx->q_data[V4L2_M2M_DST].sizeimage[0] = CODA_MAX_FRAME_SIZE;
+	ctx->q_data[V4L2_M2M_DST].num_planes = 1;
 }
 
 /*
@@ -1382,15 +1460,18 @@ static int coda_queue_setup(struct vb2_queue *vq,
 {
 	struct coda_ctx *ctx = vb2_get_drv_priv(vq);
 	struct coda_q_data *q_data;
-	unsigned int size;
+	unsigned int size = 0;
+	int i;
 
 	q_data = get_q_data(ctx, vq->type);
-	size = q_data->sizeimage;
 
-	*nplanes = 1;
-	sizes[0] = size;
+	for (i = 0; i < q_data->num_planes; ++i) {
+		size += q_data->sizeimage[i];
+		sizes[i] = q_data->sizeimage[i];
+		alloc_ctxs[i] = ctx->dev->alloc_ctx;
+	}
 
-	alloc_ctxs[0] = ctx->dev->alloc_ctx;
+	*nplanes = q_data->num_planes;
 
 	v4l2_dbg(1, coda_debug, &ctx->dev->v4l2_dev,
 		 "get %d buffer(s) of size %d each.\n", *nbuffers, size);
@@ -1402,15 +1483,18 @@ static int coda_buf_prepare(struct vb2_buffer *vb)
 {
 	struct coda_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 	struct coda_q_data *q_data;
+	int i;
 
 	q_data = get_q_data(ctx, vb->vb2_queue->type);
 
-	if (vb2_plane_size(vb, 0) < q_data->sizeimage) {
-		v4l2_warn(&ctx->dev->v4l2_dev,
-			  "%s data will not fit into plane (%lu < %lu)\n",
-			  __func__, vb2_plane_size(vb, 0),
-			  (long)q_data->sizeimage);
-		return -EINVAL;
+	for (i = 0; i < q_data->num_planes; ++i) {
+		if (vb2_plane_size(vb, i) < q_data->sizeimage[i]) {
+			v4l2_warn(&ctx->dev->v4l2_dev,
+				"%s data will not fit into plane (%lu < %lu)\n",
+				__func__, vb2_plane_size(vb, 0),
+				(long)q_data->sizeimage);
+			return -EINVAL;
+		}
 	}
 
 	return 0;
@@ -1428,7 +1512,7 @@ static void coda_buf_queue(struct vb2_buffer *vb)
 	 * bitstream ringbuffer and mark it as ready to be dequeued.
 	 */
 	if (!coda_format_is_yuv(q_data->fmt) &&
-	    vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+	    vb->vb2_queue->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		/*
 		 * For backwards compatiblity, queuing an empty buffer marks
 		 * the stream end
@@ -1520,12 +1604,14 @@ static int coda_alloc_framebuffers(struct coda_ctx *ctx, struct coda_q_data *q_d
 
 	/* Allocate frame buffers */
 	for (i = 0; i < ctx->num_internal_frames; i++) {
-		size_t size;
+		size_t size = 0;
+		int p;
 
-		size = q_data->sizeimage;
+		for (p = 0; p < q_data->num_planes; ++p)
+			size += q_data->sizeimage[p];
 		if (ctx->codec->src_fourcc == V4L2_PIX_FMT_H264 &&
 		    dev->devtype->product == CODA_7541)
-			ctx->internal_frames[i].size += ysize/4;
+			size += ysize/4;
 		ret = coda_alloc_context_buf(ctx, &ctx->internal_frames[i], size);
 		if (ret < 0) {
 			coda_free_framebuffers(ctx);
@@ -1596,7 +1682,7 @@ static void coda_setup_iram(struct coda_ctx *ctx)
 	if (ctx->inst_type == CODA_INST_ENCODER) {
 		struct coda_q_data *q_data_src;
 
-		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 		mb_width = DIV_ROUND_UP(q_data_src->width, 16);
 
 		/* Prioritize in case IRAM is too small for everything */
@@ -1649,7 +1735,7 @@ static void coda_setup_iram(struct coda_ctx *ctx)
 		struct coda_q_data *q_data_dst;
 		int mb_height;
 
-		q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 		mb_width = DIV_ROUND_UP(q_data_dst->width, 16);
 		mb_height = DIV_ROUND_UP(q_data_dst->height, 16);
 
@@ -1810,8 +1896,8 @@ static int coda_start_decoding(struct coda_ctx *ctx)
 	int ret;
 
 	/* Start decoding */
-	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
-	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	bitstream_buf = ctx->bitstream.paddr;
 	bitstream_size = ctx->bitstream.size;
 	src_fourcc = q_data_src->fmt->fourcc;
@@ -1979,9 +2065,8 @@ static int coda_start_streaming(struct vb2_queue *q, unsigned int count)
 	u32 dst_fourcc;
 	u32 value;
 	int ret = 0;
-
-	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
-	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		if (!coda_format_is_yuv(q_data_src->fmt)) {
 			if (coda_get_bitstream_payload(ctx) < 512)
 				return -EINVAL;
@@ -2013,7 +2098,7 @@ static int coda_start_streaming(struct vb2_queue *q, unsigned int count)
 	ctx->gopcounter = ctx->params.gop_size - 1;
 	buf = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
 	bitstream_buf = vb2_dma_contig_plane_dma_addr(buf, 0);
-	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	bitstream_size = q_data_dst->sizeimage;
 	dst_fourcc = q_data_dst->fmt->fourcc;
 
@@ -2281,7 +2366,7 @@ static int coda_stop_streaming(struct vb2_queue *q)
 	struct coda_ctx *ctx = vb2_get_drv_priv(q);
 	struct coda_dev *dev = ctx->dev;
 
-	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT) {
+	if (q->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		v4l2_dbg(1, coda_debug, &dev->v4l2_dev,
 			 "%s: output\n", __func__);
 		ctx->streamon_out = 0;
@@ -2429,7 +2514,7 @@ static int coda_queue_init(void *priv, struct vb2_queue *src_vq,
 	struct coda_ctx *ctx = priv;
 	int ret;
 
-	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	src_vq->io_modes = VB2_DMABUF | VB2_MMAP | VB2_USERPTR;
 	src_vq->drv_priv = ctx;
 	src_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
@@ -2441,7 +2526,7 @@ static int coda_queue_init(void *priv, struct vb2_queue *src_vq,
 	if (ret)
 		return ret;
 
-	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	dst_vq->io_modes = VB2_DMABUF | VB2_MMAP | VB2_USERPTR;
 	dst_vq->drv_priv = ctx;
 	dst_vq->buf_struct_size = sizeof(struct v4l2_m2m_buffer);
@@ -2672,7 +2757,7 @@ static void coda_finish_decode(struct coda_ctx *ctx)
 				ctx->bitstream.vaddr, ctx->bitstream.size);
 	}
 
-	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+	q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	src_fourcc = q_data_src->fmt->fourcc;
 
 	val = coda_read(dev, CODA_RET_DEC_PIC_SUCCESS);
@@ -2698,7 +2783,7 @@ static void coda_finish_decode(struct coda_ctx *ctx)
 	width = (val >> 16) & 0xffff;
 	height = val & 0xffff;
 
-	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 
 	val = coda_read(dev, CODA_RET_DEC_PIC_TYPE);
 	if ((val & 0x7) == 0) {
@@ -2775,10 +2860,14 @@ static void coda_finish_decode(struct coda_ctx *ctx)
 	/* If a frame was copied out, return it */
 	if (ctx->display_idx >= 0 &&
 	    ctx->display_idx < ctx->num_internal_frames) {
+		int p;
+
 		dst_buf = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
 		dst_buf->v4l2_buf.sequence = ctx->osequence++;
 
-		vb2_set_plane_payload(dst_buf, 0, width * height * 3 / 2);
+		for (p = 0; p < q_data_dst->num_planes; ++p)
+			vb2_set_plane_payload(dst_buf, 0,
+						q_data_dst->sizeimage[p]);
 
 		v4l2_m2m_buf_done(dst_buf, success ? VB2_BUF_STATE_DONE :
 						     VB2_BUF_STATE_ERROR);
@@ -2924,8 +3013,8 @@ static void coda_timeout(struct work_struct *work)
 	list_for_each_entry(ctx, &dev->instances, list) {
 		if (mutex_is_locked(&ctx->buffer_mutex))
 			mutex_unlock(&ctx->buffer_mutex);
-		v4l2_m2m_streamoff(NULL, ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
-		v4l2_m2m_streamoff(NULL, ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
+		v4l2_m2m_streamoff(NULL, ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+		v4l2_m2m_streamoff(NULL, ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	}
 	mutex_unlock(&dev->dev_mutex);
 
