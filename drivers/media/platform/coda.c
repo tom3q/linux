@@ -1935,8 +1935,7 @@ static int coda_start_decoding(struct coda_ctx *ctx)
 	if (dev->devtype->product == CODA_7541)
 		coda_write(dev, 0, CODA_REG_BIT_FRM_DIS_FLG(ctx->reg_idx));
 
-	coda_write(dev, CODA_BIT_DEC_SEQ_INIT_ESCAPE,
-			CODA_REG_BIT_BIT_STREAM_PARAM);
+	ctx->bit_stream_param |= CODA_BIT_DEC_SEQ_INIT_ESCAPE;
 
 	coda_write(dev, bitstream_buf, CODA_CMD_DEC_SEQ_BB_START);
 	coda_write(dev, bitstream_size / 1024, CODA_CMD_DEC_SEQ_BB_SIZE);
@@ -1961,14 +1960,14 @@ static int coda_start_decoding(struct coda_ctx *ctx)
 
 	if (coda_command_sync(ctx, CODA_COMMAND_SEQ_INIT)) {
 		v4l2_err(&dev->v4l2_dev, "CODA_COMMAND_SEQ_INIT timeout\n");
-		coda_write(dev, CODA_BIT_DEC_SEQ_INIT_ESCAPE, CODA_REG_BIT_BIT_STREAM_PARAM);
+		ctx->bit_stream_param &= ~CODA_BIT_DEC_SEQ_INIT_ESCAPE;
 		return -ETIMEDOUT;
 	}
 
 	/* Update kfifo out pointer from coda bitstream read pointer */
 	coda_kfifo_sync_from_device(ctx);
 
-	coda_write(dev, 0, CODA_REG_BIT_BIT_STREAM_PARAM);
+	ctx->bit_stream_param &= ~CODA_BIT_DEC_SEQ_INIT_ESCAPE;
 
 	if (coda_read(dev, CODA_RET_DEC_SEQ_SUCCESS) == 0) {
 		v4l2_err(&dev->v4l2_dev,
