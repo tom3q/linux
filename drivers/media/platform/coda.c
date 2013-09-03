@@ -1451,13 +1451,23 @@ static void set_default_params(struct coda_ctx *ctx)
 				coda_find_format(ctx->codec->src_fourcc);
 	ctx->q_data[V4L2_M2M_DST].fmt =
 				coda_find_format(ctx->codec->dst_fourcc);
+
+	if (coda_format_is_yuv(ctx->q_data[V4L2_M2M_DST])) {
+		ctx->q_data[V4L2_M2M_SRC].sizeimage[0] =
+				CODA_MAX_FRAME_SIZE / 2;
+		ctx->q_data[V4L2_M2M_DST].sizeimage[0] =
+				(max_w * max_h * 3) / 2;
+	} else {
+		ctx->q_data[V4L2_M2M_SRC].sizeimage[0] =
+				(max_w * max_h * 3) / 2;
+		ctx->q_data[V4L2_M2M_DST].sizeimage[0] = CODA_MAX_FRAME_SIZE;
+	}
+
 	ctx->q_data[V4L2_M2M_SRC].width = max_w;
 	ctx->q_data[V4L2_M2M_SRC].height = max_h;
-	ctx->q_data[V4L2_M2M_SRC].sizeimage[0] = (max_w * max_h * 3) / 2;
 	ctx->q_data[V4L2_M2M_SRC].num_planes = 1;
 	ctx->q_data[V4L2_M2M_DST].width = max_w;
 	ctx->q_data[V4L2_M2M_DST].height = max_h;
-	ctx->q_data[V4L2_M2M_DST].sizeimage[0] = CODA_MAX_FRAME_SIZE;
 	ctx->q_data[V4L2_M2M_DST].num_planes = 1;
 }
 
