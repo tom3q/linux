@@ -102,8 +102,8 @@ struct coda_fmt {
 
 struct coda_codec {
 	u32 mode;
-	u32 src_fourcc;
-	u32 dst_fourcc;
+	u32 fourcc;
+	enum coda_inst_type type;
 	u32 max_w;
 	u32 max_h;
 };
@@ -378,8 +378,11 @@ static inline bool coda_format_is_mplane(const struct coda_fmt *fmt)
 	return !!(fmt->flags & CODA_FMT_MPLANE);
 }
 
-#define CODA_CODEC(mode, src_fourcc, dst_fourcc, max_w, max_h) \
-	{ mode, src_fourcc, dst_fourcc, max_w, max_h }
+#define CODA_DECODER(mode, fourcc, max_w, max_h) \
+	{ mode, fourcc, CODA_INST_DECODER, max_w, max_h }
+
+#define CODA_ENCODER(mode, fourcc, max_w, max_h) \
+	{ mode, fourcc, CODA_INST_ENCODER, max_w, max_h }
 
 /*
  * Arrays of codecs supported by each given version of Coda:
@@ -389,39 +392,23 @@ static inline bool coda_format_is_mplane(const struct coda_fmt *fmt)
  * Use V4L2_PIX_FMT_YUV420 as placeholder for all supported YUV 4:2:0 variants
  */
 static struct coda_codec codadx6_codecs[] = {
-	CODA_CODEC(CODADX6_MODE_ENCODE_H264, V4L2_PIX_FMT_YUV420, V4L2_PIX_FMT_H264,  720, 576),
-	CODA_CODEC(CODADX6_MODE_ENCODE_MP4,  V4L2_PIX_FMT_YUV420, V4L2_PIX_FMT_MPEG4, 720, 576),
+	CODA_ENCODER(CODADX6_MODE_ENCODE_H264, V4L2_PIX_FMT_H264, 720, 576),
+	CODA_ENCODER(CODADX6_MODE_ENCODE_MP4, V4L2_PIX_FMT_MPEG4, 720, 576),
 };
 
 static struct coda_codec coda7_codecs[] = {
-	CODA_CODEC(CODA7_MODE_ENCODE_H264, V4L2_PIX_FMT_YUV420, V4L2_PIX_FMT_H264,   1280, 720),
-	CODA_CODEC(CODA7_MODE_ENCODE_MP4,  V4L2_PIX_FMT_YUV420, V4L2_PIX_FMT_MPEG4,  1280, 720),
-	CODA_CODEC(CODA7_MODE_DECODE_H264, V4L2_PIX_FMT_H264,   V4L2_PIX_FMT_YUV420, 1920, 1080),
-	CODA_CODEC(CODA7_MODE_DECODE_MP4,  V4L2_PIX_FMT_MPEG4,  V4L2_PIX_FMT_YUV420, 1920, 1080),
+	CODA_ENCODER(CODA7_MODE_ENCODE_H264, V4L2_PIX_FMT_H264, 1280, 720),
+	CODA_ENCODER(CODA7_MODE_ENCODE_MP4, V4L2_PIX_FMT_MPEG4, 1280, 720),
+	CODA_DECODER(CODA7_MODE_DECODE_H264, V4L2_PIX_FMT_H264, 1920, 1080),
+	CODA_DECODER(CODA7_MODE_DECODE_MP4, V4L2_PIX_FMT_MPEG4, 1920, 1080),
 };
 
 static struct coda_codec mfcv1_codecs[] = {
-	CODA_CODEC(CODADX6_MODE_DECODE_MP4, V4L2_PIX_FMT_MPEG4,
-			V4L2_PIX_FMT_YUV420, 720, 576),
-	CODA_CODEC(CODADX6_MODE_ENCODE_MP4, V4L2_PIX_FMT_YUV420,
-			V4L2_PIX_FMT_MPEG4, 720, 576),
-	CODA_CODEC(CODADX6_MODE_DECODE_H264, V4L2_PIX_FMT_H264,
-			V4L2_PIX_FMT_YUV420, 720, 576),
-	CODA_CODEC(CODADX6_MODE_ENCODE_H264, V4L2_PIX_FMT_YUV420,
-			V4L2_PIX_FMT_H264, 720, 576),
+	CODA_ENCODER(CODADX6_MODE_ENCODE_H264, V4L2_PIX_FMT_H264, 720, 576),
+	CODA_ENCODER(CODADX6_MODE_ENCODE_MP4, V4L2_PIX_FMT_MPEG4, 720, 576),
+	CODA_DECODER(CODADX6_MODE_DECODE_H264, V4L2_PIX_FMT_H264, 720, 576),
+	CODA_DECODER(CODADX6_MODE_DECODE_MP4, V4L2_PIX_FMT_MPEG4, 720, 576),
 };
-
-/*
- * Normalize all supported YUV 4:2:0 formats to the value used in the codec
- * tables.
- */
-static u32 coda_format_normalize_yuv(const struct coda_fmt *fmt)
-{
-	if (!fmt)
-		return 0;
-
-	return coda_format_is_yuv(fmt) ? V4L2_PIX_FMT_YUV420 : fmt->fourcc;
-}
 
 static struct coda_codec *coda_find_codec(struct coda_dev *dev,
 					  const struct coda_fmt *src_fmt,
@@ -429,24 +416,25 @@ static struct coda_codec *coda_find_codec(struct coda_dev *dev,
 {
 	struct coda_codec *codecs = dev->devtype->codecs;
 	int num_codecs = dev->devtype->num_codecs;
-	u32 src_fourcc, dst_fourcc;
+	enum coda_inst_type type;
+	u32 fourcc;
 	int k;
 
-	src_fourcc = coda_format_normalize_yuv(src_fmt);
-	dst_fourcc = coda_format_normalize_yuv(dst_fmt);
-	if (src_fourcc == dst_fourcc)
+	if (src_fmt && !coda_format_is_yuv(src_fmt)) {
+		type = CODA_INST_DECODER;
+		fourcc = src_fmt->fourcc;
+	} else if (dst_fmt && !coda_format_is_yuv(dst_fmt)) {
+		type = CODA_INST_ENCODER;
+		fourcc = dst_fmt->fourcc;
+	} else {
 		return NULL;
-
-	for (k = 0; k < num_codecs; k++) {
-		if ((!src_fourcc || codecs[k].src_fourcc == src_fourcc) &&
-		    (!dst_fourcc || codecs[k].dst_fourcc == dst_fourcc))
-			break;
 	}
 
-	if (k == num_codecs)
-		return NULL;
+	for (k = 0; k < num_codecs; k++)
+		if (codecs[k].type == type && codecs[k].fourcc == fourcc)
+			return &codecs[k];
 
-	return &codecs[k];
+	return NULL;
 }
 
 /*
@@ -495,11 +483,12 @@ static int enum_fmt_filtered(void *priv, struct v4l2_fmtdesc *f,
 		for (k = 0; k < num_codecs; k++) {
 			/* if src_fourcc is set, only consider matching codecs */
 			if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
-			    formats[i].fourcc == codecs[k].dst_fourcc &&
-			    (!src_fourcc || src_fourcc == codecs[k].src_fourcc))
+			    codecs[k].type == CODA_INST_ENCODER &&
+			    formats[i].fourcc == codecs[k].fourcc)
 				break;
 			if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE &&
-			    formats[i].fourcc == codecs[k].src_fourcc)
+			    codecs[k].type == CODA_INST_DECODER &&
+			    formats[i].fourcc == codecs[k].fourcc)
 				break;
 		}
 		if (k < num_codecs) {
@@ -702,7 +691,8 @@ static int vidioc_try_fmt_vid_cap(struct file *file, void *priv,
 	f->fmt.pix_mp.colorspace = ctx->colorspace;
 
 	/* The h.264 decoder only returns complete 16x16 macroblocks */
-	if (codec && codec->src_fourcc == V4L2_PIX_FMT_H264) {
+	if (codec && codec->type == CODA_INST_DECODER &&
+	    codec->fourcc == V4L2_PIX_FMT_H264) {
 		f->fmt.pix_mp.width = round_up(f->fmt.pix_mp.width, 16);
 		f->fmt.pix_mp.height = round_up(f->fmt.pix_mp.height, 16);
 	}
@@ -1447,19 +1437,22 @@ static void set_default_params(struct coda_ctx *ctx)
 	ctx->aborting = 0;
 
 	/* Default formats for output and input queues */
-	ctx->q_data[V4L2_M2M_SRC].fmt =
-				coda_find_format(ctx->codec->src_fourcc);
-	ctx->q_data[V4L2_M2M_DST].fmt =
-				coda_find_format(ctx->codec->dst_fourcc);
-
-	if (coda_format_is_yuv(ctx->q_data[V4L2_M2M_DST])) {
+	if (ctx->codec->type == CODA_INST_DECODER) {
+		ctx->q_data[V4L2_M2M_SRC].fmt =
+				coda_find_format(ctx->codec->fourcc);
 		ctx->q_data[V4L2_M2M_SRC].sizeimage[0] =
 				CODA_MAX_FRAME_SIZE / 2;
+		ctx->q_data[V4L2_M2M_DST].fmt =
+				coda_find_format(V4L2_PIX_FMT_YUV420);
 		ctx->q_data[V4L2_M2M_DST].sizeimage[0] =
 				(max_w * max_h * 3) / 2;
 	} else {
+		ctx->q_data[V4L2_M2M_SRC].fmt =
+				coda_find_format(V4L2_PIX_FMT_YUV420);
 		ctx->q_data[V4L2_M2M_SRC].sizeimage[0] =
 				(max_w * max_h * 3) / 2;
+		ctx->q_data[V4L2_M2M_DST].fmt =
+				coda_find_format(ctx->codec->fourcc);
 		ctx->q_data[V4L2_M2M_DST].sizeimage[0] = CODA_MAX_FRAME_SIZE;
 	}
 
@@ -1619,7 +1612,8 @@ static int coda_alloc_framebuffers(struct coda_ctx *ctx, struct coda_q_data *q_d
 	int ret;
 	int i;
 
-	if (ctx->codec && ctx->codec->src_fourcc == V4L2_PIX_FMT_H264)
+	if (ctx->codec && ctx->codec->type == CODA_INST_DECODER &&
+	    ctx->codec->fourcc == V4L2_PIX_FMT_H264)
 		height = round_up(height, 16);
 	ysize = round_up(q_data->width, 8) * height;
 
@@ -1630,7 +1624,8 @@ static int coda_alloc_framebuffers(struct coda_ctx *ctx, struct coda_q_data *q_d
 
 		for (p = 0; p < q_data->num_planes; ++p)
 			size += q_data->sizeimage[p];
-		if (ctx->codec->src_fourcc == V4L2_PIX_FMT_H264 &&
+		if (ctx->codec->type == CODA_INST_DECODER &&
+		    ctx->codec->fourcc == V4L2_PIX_FMT_H264 &&
 		    dev->devtype->product == CODA_7541)
 			size += ysize/4;
 		ret = coda_alloc_context_buf(ctx, &ctx->internal_frames[i], size);
@@ -1648,7 +1643,8 @@ static int coda_alloc_framebuffers(struct coda_ctx *ctx, struct coda_q_data *q_d
 		coda_parabuf_write(ctx, i * 3 + 2, paddr + ysize + ysize/4); /* Cr */
 
 		/* mvcol buffer for h.264 */
-		if (ctx->codec->src_fourcc == V4L2_PIX_FMT_H264 &&
+		if (ctx->codec->type == CODA_INST_DECODER &&
+		    ctx->codec->fourcc == V4L2_PIX_FMT_H264 &&
 		    dev->devtype->product == CODA_7541)
 			coda_parabuf_write(ctx, 96 + i,
 					   ctx->internal_frames[i].paddr +
@@ -1657,7 +1653,8 @@ static int coda_alloc_framebuffers(struct coda_ctx *ctx, struct coda_q_data *q_d
 
 	/* mvcol buffer for mpeg4 */
 	if ((dev->devtype->product == CODA_7541) &&
-	    (ctx->codec->src_fourcc == V4L2_PIX_FMT_MPEG4))
+	    ctx->codec->type == CODA_INST_DECODER &&
+	    ctx->codec->fourcc == V4L2_PIX_FMT_H264)
 		coda_parabuf_write(ctx, 97, ctx->internal_frames[i].paddr +
 					    ysize + ysize/4 + ysize/4);
 
