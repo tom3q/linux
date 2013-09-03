@@ -471,7 +471,7 @@ static int vidioc_querycap(struct file *file, void *priv,
 	return 0;
 }
 
-static int enum_fmt(void *priv, struct v4l2_fmtdesc *f,
+static int enum_fmt_filtered(void *priv, struct v4l2_fmtdesc *f,
 			enum v4l2_buf_type type, const struct coda_fmt *src_fmt)
 {
 	struct coda_ctx *ctx = fh_to_ctx(priv);
@@ -481,7 +481,6 @@ static int enum_fmt(void *priv, struct v4l2_fmtdesc *f,
 	int num_codecs = ctx->dev->devtype->num_codecs;
 	int num_formats = ARRAY_SIZE(coda_formats);
 	int i, k, num = 0;
-	u32 src_fourcc = src_fmt ? src_fmt->fourcc : 0;
 
 	for (i = 0; i < num_formats; i++) {
 		/* Both uncompressed formats are always supported */
@@ -521,6 +520,18 @@ static int enum_fmt(void *priv, struct v4l2_fmtdesc *f,
 	return -EINVAL;
 }
 
+static int enum_fmt(void *priv, struct v4l2_fmtdesc *f, enum v4l2_buf_type type)
+{
+	if (f->index >= ARRAY_SIZE(coda_formats))
+		return -EINVAL;
+
+	strlcpy(f->description, coda_formats[f->index].name,
+			sizeof(f->description));
+	f->pixelformat = coda_formats[f->index].fourcc;
+
+	return 0;
+}
+
 static int vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
 				   struct v4l2_fmtdesc *f)
 {
@@ -533,16 +544,16 @@ static int vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
 	if (vb2_is_streaming(src_vq)) {
 		q_data_src = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 
-		return enum_fmt(priv, f, f->type, q_data_src->fmt);
+		return enum_fmt_filtered(priv, f, f->type, q_data_src->fmt);
 	}
 
-	return enum_fmt(priv, f, f->type, 0);
+	return enum_fmt(priv, f, f->type);
 }
 
 static int vidioc_enum_fmt_vid_out(struct file *file, void *priv,
 				   struct v4l2_fmtdesc *f)
 {
-	return enum_fmt(priv, f, f->type, 0);
+	return enum_fmt(priv, f, f->type);
 }
 
 static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
