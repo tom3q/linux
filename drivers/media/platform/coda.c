@@ -2108,21 +2108,17 @@ static int coda_start_streaming(struct vb2_queue *q, unsigned int count)
 			return -EINVAL;
 
 		ctx->streamon_cap = 1;
-	}
 
-	/* Don't start the coda unless both queues are on */
-	if (!(ctx->streamon_out & ctx->streamon_cap))
-		return 0;
+		/* Output queue controls initialization if decoding. */
+		if (!coda_format_is_yuv(q_data_src->fmt))
+			return 0;
+	}
 
 	/* Allow device_run with no buffers queued and after streamoff */
 	v4l2_m2m_set_src_buffered(ctx->m2m_ctx, true);
 
 	ctx->gopcounter = ctx->params.gop_size - 1;
-	buf = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
-	bitstream_buf = vb2_dma_contig_plane_dma_addr(buf, 0);
 	q_data_dst = get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
-	bitstream_size = q_data_dst->sizeimage;
-	dst_fourcc = q_data_dst->fmt->fourcc;
 
 	ctx->codec = coda_find_codec(ctx->dev, q_data_src->fmt,
 					q_data_dst->fmt);
@@ -2149,6 +2145,15 @@ static int coda_start_streaming(struct vb2_queue *q, unsigned int count)
 			return 0;
 		}
 	}
+
+	/* Don't start encoding unless both queues are on */
+	if (!(ctx->streamon_out & ctx->streamon_cap))
+		return 0;
+
+	buf = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
+	bitstream_buf = vb2_dma_contig_plane_dma_addr(buf, 0);
+	bitstream_size = q_data_dst->sizeimage[0];
+	dst_fourcc = q_data_dst->fmt->fourcc;
 
 	if (!coda_is_initialized(dev)) {
 		v4l2_err(v4l2_dev, "coda is not initialized.\n");
