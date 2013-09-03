@@ -642,7 +642,12 @@ static int vidioc_try_fmt(struct coda_codec *codec, struct v4l2_format *f,
 		}
 	} else { /*encoded formats h.264/mpeg4 */
 		f->fmt.pix_mp.plane_fmt[0].bytesperline = 0;
-		f->fmt.pix_mp.plane_fmt[0].sizeimage = CODA_MAX_FRAME_SIZE;
+		if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+			f->fmt.pix_mp.plane_fmt[0].sizeimage =
+						CODA_MAX_FRAME_SIZE / 2;
+		else
+			f->fmt.pix_mp.plane_fmt[0].sizeimage =
+						CODA_MAX_FRAME_SIZE;
 	}
 
 	return 0;
