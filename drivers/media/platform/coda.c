@@ -3086,6 +3086,7 @@ static char *coda_product_name(int product)
 static int coda_hw_init(struct coda_dev *dev)
 {
 	u16 product, major, minor, release;
+	int old_coda_debug;
 	u32 data;
 	u16 *p;
 	int i, ret;
@@ -3103,6 +3104,10 @@ static int coda_hw_init(struct coda_dev *dev)
 		if (ret)
 			goto err_clk_spec;
 	}
+
+	/* Disable coda_debug for firmware upload to reduce the noise. */
+	old_coda_debug = coda_debug;
+	coda_debug = 0;
 
 	/*
 	 * Copy the first CODA_ISRAM_SIZE in the internal SRAM.
@@ -3129,6 +3134,9 @@ static int coda_hw_init(struct coda_dev *dev)
 	/* Clear registers */
 	for (i = 0; i < 64; i++)
 		coda_write(dev, 0, CODA_REG_BIT_CODE_BUF_ADDR + i * 4);
+
+	/* Restore coda_debug. */
+	coda_debug = old_coda_debug;
 
 	/* Tell the BIT where to find everything it needs */
 	if (dev->devtype->product == CODA_7541) {
