@@ -141,13 +141,22 @@ menuconfig V4L_MEM2MEM_DRIVERS
 if V4L_MEM2MEM_DRIVERS
 
 config VIDEO_CODA
-	tristate "Chips&Media Coda multi-standard codec IP"
+	tristate "Chips&Media Coda multi-standard codec IP (legacy)"
 	depends on VIDEO_DEV && VIDEO_V4L2 && ARCH_MXC
 	select VIDEOBUF2_DMA_CONTIG
 	select V4L2_MEM2MEM_DEV
 	---help---
 	   Coda is a range of video codec IPs that supports
 	   H.264, MPEG-4, and other video formats.
+
+config VIDEO_CODA_NG
+	tristate "Chips&Media Coda multi-standard codec IP (new)"
+	depends on VIDEO_DEV && VIDEO_V4L2 && (ARCH_MXC || ARCH_S3C64XX)
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_MEM2MEM_DEV
+	---help---
+	   MFC is a video codec IP that is able to encode and decode
+	   H.263, H.264, MPEG-4 and VC-1 video streams.
 
 config VIDEO_MEM2MEM_DEINTERLACE
 	tristate "Deinterlace support"
