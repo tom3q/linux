@@ -1,0 +1,273 @@
+/*
+ * Samsung's S5PV210 SoC device tree source
+ *
+ * Copyright (c) 2013 Mateusz Krawczuk <m.krawczuk@partner.samsung.com>
+ *
+ * Samsung's S5PV210 SoC device nodes are listed in this file. S5PV210
+ * based board files can include this file and provide values for board specfic
+ * bindings.
+ *
+ * Note: This file does not include device nodes for all the controllers in
+ * S5PV210 SoC. As device tree coverage for S5PV210 increases, additional
+ * nodes can be added to this file.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+#include <dt-bindings/input/input.h>
+#include "s5pv210.dtsi"
+
+/ {
+	model = "S5PV210 SMDK";
+	compatible = "samsung,smdkv210", "samsung,s5pv210";
+
+	chosen {
+		bootargs = "console=ttySAC0,115200n8 root=/dev/mmcblk0p1 rw rootwait ignore_loglevel earlyprintk";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <>;
+	};
+
+	fixed-clocks {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		xxti: oscillator@0 {
+			compatible = "fixed-clock";
+			reg = <0>;
+			clock-output-names = "xxti";
+			clock-frequency = <0>;
+			#clock-cells = <0>;
+		};
+
+		xusbxti: oscillator@1 {
+			compatible = "fixed-clock";
+			reg = <1>;
+			clock-output-names = "xusbxti";
+			clock-frequency = <24000000>;
+			#clock-cells = <0>;
+		};
+	};
+
+	regulators {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		vtf_reg: fixed-regulator@0 {
+			compatible = "regulator-fixed";
+			regulator-name = "V_TF_2.8V";
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			reg = <0>;
+			gpios = <&mp05 4 0>;
+		};
+
+		pda_reg: fixed-regulator@1 {
+			compatible = "regulator-fixed";
+			regulator-name = "VCC_1.8V_PDA";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			reg = <1>;
+		};
+
+		bat_reg: fixed-regulator@2 {
+			compatible = "regulator-fixed";
+			regulator-name = "V_BAT";
+			regulator-min-microvolt = <3700000>;
+			regulator-max-microvolt = <3700000>;
+			reg = <2>;
+		};
+	};
+
+	i2c-ac {
+		compatible = "i2c-gpio";
+		gpios = <&mp05 3 0>, /* sda */
+			<&mp05 2 0>; /* scl */
+		i2c-gpio,delay-us = <2>;        /* ~100 kHz */
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+
+	keypad: keypad@e1600000 {
+		compatible = "samsung,s5pv210-keypad";
+		reg = <0xe1600000 0x100>;
+		interrupt-parent = <&vic2>;
+		interrupts = <25>;
+		clocks = <&clocks KEYIF>;
+		clock-names = "keypad";
+		status = "okay";
+		linux,input-no-autorepeat;
+		linux,input-wakeup;
+		samsung,keypad-num-rows = <8>;
+		samsung,keypad-num-columns = <8>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&keypad_row0>, <&keypad_row1>, <&keypad_row2>,
+				<&keypad_row3>, <&keypad_row4>, <&keypad_row5>,
+				<&keypad_row6>, <&keypad_row7>,
+				<&keypad_col0>, <&keypad_col1>, <&keypad_col2>,
+				<&keypad_col3>, <&keypad_col4>, <&keypad_col5>,
+				<&keypad_col6>, <&keypad_col7>;
+
+		key_1 {
+			keypad,row = <0>;
+			keypad,column = <3>;
+			linux,code = <KEY_1>;
+		};
+
+		key_2 {
+			keypad,row = <0>;
+			keypad,column = <4>;
+			linux,code = <KEY_2>;
+		};
+
+		key_3 {
+			keypad,row = <0>;
+			keypad,column = <5>;
+			linux,code = <KEY_3>;
+		};
+
+		key_4 {
+			keypad,row = <0>;
+			keypad,column = <6>;
+			linux,code = <KEY_4>;
+		};
+
+		key_5 {
+			keypad,row = <0
+			>;
+			keypad,column = <7>;
+			linux,code = <KEY_5>;
+		};
+
+		key_6 {
+			keypad,row = <1>;
+			keypad,column = <3>;
+			linux,code = <KEY_A>;
+		};
+		key_7 {
+			keypad,row = <1>;
+			keypad,column = <4>;
+			linux,code = <KEY_B>;
+		};
+
+		key_8 {
+			keypad,row = <1>;
+			keypad,column = <5>;
+			linux,code = <KEY_C>;
+		};
+
+		key_9 {
+			keypad,row = <1>;
+			keypad,column = <6>;
+			linux,code = <KEY_D>;
+		};
+
+		key_10 {
+			keypad,row = <1>;
+			keypad,column = <7>;
+			linux,code = <KEY_E>;
+		};
+	};
+
+	ethernet@18000000 {
+		compatible = "davicom,dm9000";
+		reg = <0xA8000000 0x2 0xA8000004 0x2>;
+		interrupt-parent = <&mp01>;
+		interrupts = <5 2>;
+		local-mac-address = [00 00 de ad be ef];
+		davicom,no-eeprom;
+		status = "disable";
+	};
+
+	backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm 0 5000000>;
+		brightness-levels = <0 4 8 16 32 64 128 255>;
+		default-brightness-level = <6>;
+	};
+};
+
+
+&uart0 {
+	status = "okay";
+};
+
+&uart1 {
+	status = "okay";
+};
+
+&uart2 {
+	status = "okay";
+};
+
+&sdhci0 {
+	bus-width = <8>;
+	non-removable;
+	status = "okay";
+};
+
+&sdhci1 {
+	bus-width = <4>;
+	pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_cd &sd1_bus4>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&sdhci2 {
+	bus-width = <4>;
+	cd-gpios = <&gph3 4 1>;
+	vmmc-supply = <&vtf_reg>;
+	cd-inverted;
+	pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_bus4>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&sdhci3 {
+	bus-width = <4>;
+	pinctrl-0 = <&sd3_clk &sd3_cmd &sd3_cd &sd3_bus4>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&spi_0 {
+	status = "okay";
+};
+
+&spi_1 {
+	status = "okay";
+};
+
+&hsotg {
+	status = "okay";
+};
+
+&usbphy {
+	clocks = <&clocks USB_OTG>, <&xusbxti>, <&xusbxti>;
+	clock-names = "phy", "device", "host";
+};
+
+&fimd {
+	pinctrl-0 = <&lcd_clk &lcd_data24 &pwm1_out>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&g2d {
+	status = "okay";
+};
+
+&ehci {
+	status = "okay";
+};
+
+&ohci {
+	status = "okay";
+};

@@ -1,0 +1,165 @@
+/*
+ * Samsung's S5PV210 SoC device tree source
+ *
+ * Copyright (c) 2013 Mateusz Krawczuk <m.krawczuk@partner.samsung.com>
+ *
+ * Samsung's S5PV210 SoC device nodes are listed in this file. S5PV210
+ * based board files can include this file and provide values for board specfic
+ * bindings.
+ *
+ * Note: This file does not include device nodes for all the controllers in
+ * S5PV210 SoC. As device tree coverage for S5PV210 increases, additional
+ * nodes can be added to this file.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+#include <dt-bindings/input/input.h>
+#include "s5pv210.dtsi"
+
+/ {
+	model = "S5PC110 SMDK";
+	compatible = "samsung,smdkc110", "samsung,s5pv210";
+
+	chosen {
+		bootargs = "console=ttySAC0,115200n8 root=/dev/mmcblk0p1 rw rootwait ignore_loglevel earlyprintk";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <>;
+	};
+
+	fixed-clocks {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		xxti: oscillator@0 {
+			compatible = "fixed-clock";
+			reg = <0>;
+			clock-output-names = "xxti";
+			clock-frequency = <0>;
+			#clock-cells = <0>;
+		};
+
+		xusbxti: oscillator@1 {
+			compatible = "fixed-clock";
+			reg = <1>;
+			clock-output-names = "xusbxti";
+			clock-frequency = <24000000>;
+			#clock-cells = <0>;
+		};
+	};
+
+	regulators {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		vtf_reg: fixed-regulator@0 {
+			compatible = "regulator-fixed";
+			regulator-name = "V_TF_2.8V";
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			reg = <0>;
+			gpios = <&mp05 4 0>;
+		};
+
+		pda_reg: fixed-regulator@1 {
+			compatible = "regulator-fixed";
+			regulator-name = "VCC_1.8V_PDA";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			reg = <1>;
+		};
+
+		bat_reg: fixed-regulator@2 {
+			compatible = "regulator-fixed";
+			regulator-name = "V_BAT";
+			regulator-min-microvolt = <3700000>;
+			regulator-max-microvolt = <3700000>;
+			reg = <2>;
+		};
+	};
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&uart1 {
+	status = "okay";
+};
+
+&uart2 {
+	status = "okay";
+};
+
+&sdhci0 {
+	bus-width = <8>;
+	non-removable;
+	status = "okay";
+};
+
+&sdhci1 {
+	bus-width = <4>;
+	pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_cd &sd1_bus4>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&sdhci2 {
+	bus-width = <4>;
+	cd-gpios = <&gph3 4 1>;
+	vmmc-supply = <&vtf_reg>;
+	cd-inverted;
+	pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_bus4>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&sdhci3 {
+	bus-width = <4>;
+	pinctrl-0 = <&sd3_clk &sd3_cmd &sd3_cd &sd3_bus4>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&spi_0 {
+	status = "okay";
+};
+
+&spi_1 {
+	status = "okay";
+};
+
+&hsotg {
+	status = "okay";
+};
+
+&usbphy {
+	clocks = <&clocks USB_OTG>, <&xusbxti>, <&xusbxti>;
+	clock-names = "phy", "device", "host";
+};
+
+&fimd {
+	pinctrl-0 = <&lcd_clk &lcd_data24 &pwm1_out>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&g2d {
+	status = "okay";
+};
+
+&ehci {
+	status = "okay";
+};
+
+&ohci {
+	status = "okay";
+};
