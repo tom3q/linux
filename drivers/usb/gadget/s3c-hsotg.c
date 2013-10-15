@@ -3058,8 +3058,7 @@ static int s3c_hsotg_udc_stop(struct usb_gadget *gadget,
 
 	s3c_hsotg_phy_disable(hsotg);
 
-	if (!driver)
-		hsotg->driver = NULL;
+	hsotg->driver = NULL;
 
 	hsotg->gadget.speed = USB_SPEED_UNKNOWN;
 
