@@ -61,6 +61,7 @@ struct samsung_usb2_phy_config {
 	bool has_mode_switch;
 };
 
+extern const struct samsung_usb2_phy_config s5pv210_usb2_phy_config;
 extern const struct samsung_usb2_phy_config exynos4210_usb2_phy_config;
 extern const struct samsung_usb2_phy_config exynos4212_usb2_phy_config;
 #endif
