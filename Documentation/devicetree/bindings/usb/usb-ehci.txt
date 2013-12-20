@@ -14,6 +14,10 @@ If controller implementation operates with big endian descriptors,
 If both big endian registers and descriptors are used by the controller
 implementation, "big-endian" property can be specified instead of having
 both "big-endian-regs" and "big-endian-desc".
+  - port: if in the SoC there are EHCI phys, they should be listed here.
+One phy per port. Each port should have its reg entry with a consecutive
+number. Also it should contain phys and phy-names entries specifying the
+phy used by the port.
 
 Example (Sequoia 440EPx):
     ehci@e0000300 {
@@ -23,3 +27,34 @@ Example (Sequoia 440EPx):
 	   reg = <0 e0000300 90 0 e0000390 70>;
 	   big-endian;
    };
+
+Example (Exynos 4212):
+    ehci@12580000 {
+        compatible = "samsung,exynos4210-ehci";
+        reg = <0x12580000 0x20000>;
+        interrupts = <0 70 0>;
+        clocks = <&clock 304>, <&clock 305>;
+        clock-names = "usbhost", "otg";
+        status = "disabled";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        port@0 {
+            reg = <0>;
+            phys = <&usb2phy 1>;
+            phy-names = "host";
+            status = "disabled";
+        };
+        port@1 {
+            reg = <1>;
+            phys = <&usb2phy 2>;
+            phy-names = "hsic0";
+            status = "disabled";
+        };
+        port@2 {
+            reg = <2>;
+            phys = <&usb2phy 3>;
+            phy-names = "hsic1";
+            status = "disabled";
+        };
+    };
+
