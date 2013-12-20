@@ -24,6 +24,8 @@ Required properties:
     - first entry: must be "otg"
 - vusb_d-supply: phandle to voltage regulator of digital section,
 - vusb_a-supply: phandle to voltage regulator of analog section.
+- phys: from general PHY binding: phandle to the PHY device
+- phy-names: from general PHY binding: should be "usb2-phy"
 
 Example
 -----
@@ -36,5 +38,7 @@ Example
 		clock-names = "otg";
 		vusb_d-supply = <&vusb_reg>;
 		vusb_a-supply = <&vusbdac_reg>;
+		phys = <&usb2phy 0>;
+		phy-names = "usb2-phy";
 	};
 
