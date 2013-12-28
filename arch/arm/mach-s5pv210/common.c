@@ -24,6 +24,7 @@
 #include <linux/sched.h>
 #include <linux/dma-mapping.h>
 #include <linux/serial_core.h>
+#include <linux/of.h>
 
 #include <asm/proc-fns.h>
 #include <asm/mach/arch.h>
@@ -34,7 +35,13 @@
 #include <mach/regs-clock.h>
 
 #include <plat/cpu.h>
+
+#ifdef CONFIG_S5P_CLOCK
 #include <plat/clock.h>
+#else
+#include <linux/clk-provider.h>
+#endif
+
 #include <plat/devs.h>
 #include <plat/sdhci.h>
 #include <plat/adc-core.h>
@@ -49,6 +56,9 @@
 #include <plat/regs-serial.h>
 
 #include "common.h"
+
+/* External clock frequency */
+static unsigned long xusbxti_f;
 
 static const char name_s5pv210[] = "S5PV210/S5PC110";
 
@@ -229,12 +239,16 @@ void __init s5pv210_map_io(void)
 
 void __init s5pv210_init_clocks(int xtal)
 {
+#ifdef CONFIG_S5P_CLOCK
 	printk(KERN_DEBUG "%s: initializing clocks\n", __func__);
 
 	s3c24xx_register_baseclocks(xtal);
 	s5p_register_clocks(xtal);
 	s5pv210_register_clocks();
 	s5pv210_setup_clocks();
+#else
+	xusbxti_f = xtal;
+#endif
 }
 
 void __init s5pv210_init_irq(void)
@@ -248,6 +262,9 @@ void __init s5pv210_init_irq(void)
 	vic[3] = ~0;
 
 	s5p_init_irq(vic, ARRAY_SIZE(vic));
+
+	if (!of_have_populated_dt())
+		s5pv210_clk_init(NULL, 0, xusbxti_f, S3C_VA_SYS);
 }
 
 struct bus_type s5pv210_subsys = {
