@@ -12,6 +12,7 @@
 #define S3C_ADDR_BASE   0xF6000000
 #define S3C_VA_UART	S3C_ADDR_BASE + 0x01000000
 #define S5PV210_PA_UART	0xe2900000
+#define S5P6442_PA_UART 0xec000000
 
 	/* note, for the boot process to work we have to keep the UART
 	 * virtual address aligned to an 1MiB boundary for the L1
@@ -20,7 +21,11 @@
 	 */
 
 	.macro addruart, rp, rv, tmp
-		ldr	\rp, =S5PV210_PA_UART
+		mrc	p15, 0, \tmp, c0, c0, 0
+		and	\tmp, \tmp, #0xf000
+		teq	\tmp, #0xc000		@@ Cortex
+		ldreq	\rp, =S5PV210_PA_UART
+		movne	\rp, #S5P6442_PA_UART
 		ldr	\rv, =S3C_VA_UART
 #if CONFIG_DEBUG_S3C_UART != 0
 		add	\rp, \rp, #(0x400 * CONFIG_DEBUG_S3C_UART)

@@ -64,12 +64,17 @@ static void __init s5pv210_dt_init_late(void)
 }
 
 static char const *s5pv210_dt_compat[] __initconst = {
+#ifdef CONFIG_CPU_S5PV210
 	"samsung,s5pc110",
 	"samsung,s5pv210",
+#endif
+#ifdef CONFIG_CPU_S5P6442
+	"samsung,s5p6442",
+#endif
 	NULL
 };
 
-DT_MACHINE_START(S5PV210_DT, "Samsung S5PC110/S5PV210-based board")
+DT_MACHINE_START(S5PV210_DT, "Samsung S5P6442/S5PC110/S5PV210-based board")
 	.dt_compat = s5pv210_dt_compat,
 	.map_io = s5pv210_dt_map_io,
 	.restart = s5pv210_dt_restart,

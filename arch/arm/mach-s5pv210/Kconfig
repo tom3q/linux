@@ -8,7 +8,8 @@
 # Configuration options for the S5PV210/S5PC110
 
 config ARCH_S5PV210
-	bool "Samsung S5PV210/S5PC110" if ARCH_MULTI_V7
+	bool "Samsung S5PV210/S5PC110/S5P6442"
+	depends on (ARCH_MULTI_V7 || ARCH_MULTI_V6)
 	select ARCH_HAS_HOLES_MEMORYMODEL
 	select ARCH_REQUIRE_GPIOLIB
 	select ARM_VIC
@@ -24,8 +25,17 @@ config ARCH_S5PV210
 
 if ARCH_S5PV210
 
+config CPU_S5P6442
+	def_bool y
+	depends on ARCH_MULTI_V6
+	select ARM_AMBA
+	select PL330_DMA if DMADEVICES
+	help
+	  Enable S5P6442 CPU support
+
 config CPU_S5PV210
 	def_bool y
+	depends on ARCH_MULTI_V7
 	select ARM_AMBA
 	select PL330_DMA if DMADEVICES
 	help
