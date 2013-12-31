@@ -1,0 +1,633 @@
+/*
+ * Samsung's S5P6442 SoC device tree source
+ *
+ * Samsung's S5P6442 SoC device nodes are listed in this file. S5P6442
+ * based board files can include this file and provide values for board specfic
+ * bindings.
+ *
+ * Note: This file does not include device nodes for all the controllers in
+ * S5P6442 SoC. As device tree coverage for S5P6442 increases, additional
+ * nodes can be added to this file.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include "skeleton.dtsi"
+#include <dt-bindings/clock/s5pv210.h>
+#include <dt-bindings/clock/s5pv210-audss.h>
+
+/ {
+	aliases {
+		pinctrl0 = &pinctrl0;
+		i2c0 = &i2c0;
+		i2c1 = &i2c1;
+		i2c2 = &i2c2;
+		spi0 = &spi0;
+		fimc0 = &fimc0;
+		fimc1 = &fimc1;
+		fimc2 = &fimc2;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,arm1176jzf-s";
+			reg = <0>;
+		};
+	};
+
+	soc {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		external-clocks {
+			compatible = "simple-bus";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			xxti: oscillator@0 {
+				compatible = "fixed-clock";
+				reg = <0>;
+				clock-frequency = <0>;
+				clock-output-names = "xxti";
+				#clock-cells = <0>;
+			};
+
+			xusbxti: oscillator@1 {
+				compatible = "fixed-clock";
+				reg = <1>;
+				clock-frequency = <0>;
+				clock-output-names = "xusbxti";
+				#clock-cells = <0>;
+			};
+		};
+
+		onenand: flash-controller@b0600000 {
+			compatible = "samsung,s5pv210-onenand";
+			reg = <0xb0600000 0x2000>,
+				<0xb0000000 0x20000>,
+				<0xb0040000 0x20000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <7>;
+			clocks = <&clocks CLK_NANDXL>, <&clocks DOUT_FLASH>;
+			clock-names = "bus", "onenand";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			status = "disabled";
+		};
+
+		audio-subsystem {
+			compatible = "simple-bus";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			imem: sram@c0000000 {
+				compatible = "mmio-sram";
+				reg = <0xc0000000 0x8000>;
+				clocks = <&clk_audss CLK_HCLK_RP>;
+			};
+
+			dmem: sram@c0008000 {
+				compatible = "mmio-sram";
+				reg = <0xc0008000 0x10000>;
+				clocks = <&clk_audss CLK_HCLK_RP>;
+			};
+
+			obuf0: sram@c0400000 {
+				compatible = "mmio-sram";
+				reg = <0xc0400000 0x1200>;
+				clocks = <&clk_audss CLK_HCLK_BUF>;
+			};
+
+			obuf1: sram@c0500000 {
+				compatible = "mmio-sram";
+				reg = <0xc0500000 0x1200>;
+				clocks = <&clk_audss CLK_HCLK_BUF>;
+			};
+
+			clk_audss: clock-controller@c0900000 {
+				compatible = "samsung,s5pv210-audss-clock";
+				reg = <0xc0900000 0x1000>;
+				#clock-cells = <1>;
+				clock-names = "hclk", "xxti",
+						"fout_epll",
+						"sclk_audio0";
+				clocks = <&clocks DOUT_HCLKP>, <&xxti>,
+						<&clocks FOUT_EPLL>,
+						<&clocks SCLK_AUDIO0>;
+			};
+
+			commbox: commbox@c0a00000 {
+				reg = <0xc0a00000 0x1000>;
+				interrupt-parent = <&vic2>;
+				interrupts = <19>;
+			};
+
+			i2s0: i2s@c0b00000 {
+				compatible = "samsung,s5pv210-i2s";
+				reg = <0xc0b00000 0x1000>;
+				interrupt-parent = <&vic2>;
+				interrupts = <16>;
+				dma-names = "tx", "rx", "tx-sec";
+				dmas = <&pdma 10>, <&pdma 9>, <&pdma 11>;
+				clock-names = "iis",
+						"i2s_opclk0",
+						"i2s_opclk1";
+				clocks = <&clk_audss CLK_I2S>,
+						<&clk_audss CLK_I2S>,
+						<&clk_audss CLK_DOUT_AUD_BUS>;
+				samsung,idma-addr = <0xc0008000>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&i2s1_bus>;
+				#sound-dai-cells = <0>;
+				status = "disabled";
+			};
+		};
+
+		g3d: gpu@d8000000 {
+			compatible = "samsung,s3c6410-g3d";
+			reg = <0xd8000000 0x80000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <10>;
+			clock-names = "bus-clk";
+			clocks = <&clocks CLK_G3D>;
+		};
+
+		chipid@e0000000 {
+			compatible = "samsung,s5pv210-chipid";
+			reg = <0xe0000000 0x1000>;
+			clocks = <&clocks CLK_CHIPID>;
+		};
+
+		clocks: clock-controller@e0100000 {
+			compatible = "samsung,s5p6442-clock", "simple-bus";
+			reg = <0xe0100000 0x10000>;
+			clock-names = "xxti", "xusbxti";
+			clocks = <&xxti>, <&xusbxti>;
+			#clock-cells = <1>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			pmu_syscon: syscon@e0108000 {
+				compatible = "samsung-s5p6442-pmu", "syscon";
+				reg = <0xe0108000 0x8000>;
+			};
+		};
+
+		pinctrl0: pinctrl@e0200000 {
+			compatible = "samsung,s5p6442-pinctrl";
+			reg = <0xe0200000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <30>;
+			clocks = <&clocks CLK_GPIO>;
+
+			wakeup-interrupt-controller {
+				compatible = "samsung,exynos4210-wakeup-eint";
+				interrupts = <16>;
+				interrupt-parent = <&vic0>;
+			};
+		};
+
+		vic0: interrupt-controller@e4000000 {
+			compatible = "arm,pl192-vic";
+			interrupt-controller;
+			reg = <0xe4000000 0x1000>;
+			clocks = <&clocks CLK_VIC0>;
+			#interrupt-cells = <1>;
+		};
+
+		vic1: interrupt-controller@e4100000 {
+			compatible = "arm,pl192-vic";
+			interrupt-controller;
+			reg = <0xe4100000 0x1000>;
+			clocks = <&clocks CLK_VIC1>;
+			#interrupt-cells = <1>;
+		};
+
+		vic2: interrupt-controller@e4200000 {
+			compatible = "arm,pl192-vic";
+			interrupt-controller;
+			reg = <0xe4200000 0x1000>;
+			clocks = <&clocks CLK_VIC2>;
+			#interrupt-cells = <1>;
+		};
+
+		amba {
+			compatible = "arm,amba-bus";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			mdma: dma@e8000000 {
+				compatible = "arm,pl330", "arm,primecell";
+				reg = <0xe8000000 0x1000>;
+				interrupt-parent = <&vic0>;
+				interrupts = <18>;
+				clocks = <&clocks CLK_MDMA>;
+				clock-names = "apb_pclk";
+				#dma-cells = <1>;
+				#dma-channels = <8>;
+				#dma-requests = <1>;
+			};
+
+			pdma: dma@e9000000 {
+				compatible = "arm,pl330", "arm,primecell";
+				reg = <0xe9000000 0x1000>;
+				interrupt-parent = <&vic0>;
+				interrupts = <19>;
+				clocks = <&clocks CLK_PDMA0>;
+				clock-names = "apb_pclk";
+				#dma-cells = <1>;
+				#dma-channels = <8>;
+				#dma-requests = <32>;
+			};
+		};
+
+		pwm: pwm@ea000000 {
+			compatible = "samsung,s5pc100-pwm";
+			reg = <0xea000000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <21>, <22>, <23>, <24>, <25>;
+			clock-names = "timers", "pwm-tclk0",
+					"pwm-tclk1";
+			clocks = <&clocks CLK_PWM>, <&clocks SCLK_PWM>,
+					<&clocks SCLK_PWM>;
+			#pwm-cells = <3>;
+		};
+
+		watchdog: watchdog@ea200000 {
+			compatible = "samsung,s3c2410-wdt";
+			reg = <0xea200000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <27>;
+			clock-names = "watchdog";
+			clocks = <&clocks CLK_WDT>;
+		};
+
+		rtc: rtc@ea300000 {
+			compatible = "samsung,s3c6410-rtc";
+			reg = <0xea300000 0x100>;
+			interrupt-parent = <&vic0>;
+			interrupts = <28>, <29>;
+			clocks = <&clocks CLK_RTC>;
+			clock-names = "rtc";
+			status = "disabled";
+		};
+
+		uart0: serial@ec000000 {
+			compatible = "samsung,s5pv210-uart";
+			reg = <0xec000000 0x400>;
+			interrupt-parent = <&vic1>;
+			interrupts = <10>;
+			clock-names = "uart", "clk_uart_baud0",
+					"clk_uart_baud1";
+			clocks = <&clocks CLK_UART0>, <&clocks CLK_UART0>,
+					<&clocks SCLK_UART0>;
+			status = "disabled";
+		};
+
+		uart1: serial@ec000400 {
+			compatible = "samsung,s5pv210-uart";
+			reg = <0xec000400 0x400>;
+			interrupt-parent = <&vic1>;
+			interrupts = <11>;
+			clock-names = "uart", "clk_uart_baud0",
+					"clk_uart_baud1";
+			clocks = <&clocks CLK_UART1>, <&clocks CLK_UART1>,
+					<&clocks SCLK_UART1>;
+			status = "disabled";
+		};
+
+		uart2: serial@ec000800 {
+			compatible = "samsung,s5pv210-uart";
+			reg = <0xec000800 0x400>;
+			interrupt-parent = <&vic1>;
+			interrupts = <12>;
+			clock-names = "uart", "clk_uart_baud0",
+					"clk_uart_baud1";
+			clocks = <&clocks CLK_UART2>, <&clocks CLK_UART2>,
+					<&clocks SCLK_UART2>;
+			status = "disabled";
+		};
+
+		i2c0: i2c@ec100000 {
+			compatible = "samsung,s3c2440-i2c";
+			reg = <0xec100000 0x100>;
+			interrupt-parent = <&vic1>;
+			interrupts = <19>;
+			clocks = <&clocks CLK_I2C0>;
+			clock-names = "i2c";
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c0_bus>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		i2c1: i2c@ec200000 {
+			compatible = "samsung,s3c2440-i2c";
+			reg = <0xec200000 0x100>;
+			interrupt-parent = <&vic1>;
+			interrupts = <20>;
+			clocks = <&clocks CLK_I2C1>;
+			clock-names = "i2c";
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c1_bus>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		spi0: spi@ec300000 {
+			compatible = "samsung,s5pv210-spi";
+			reg = <0xec300000 0x100>;
+			interrupt-parent = <&vic1>;
+			interrupts = <15>;
+			dmas = <&pdma 17>, <&pdma 16>;
+			dma-names = "tx", "rx";
+			clocks = <&clocks CLK_SPI0>, <&clocks SCLK_SPI0>;
+			clock-names = "spi", "spi_busclk0";
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi0_bus>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		i2c2: i2c@ec600000 {
+			compatible = "samsung,s3c2440-i2c";
+			reg = <0xec600000 0x100>;
+			interrupt-parent = <&vic1>;
+			interrupts = <21>;
+			clocks = <&clocks CLK_I2C2>;
+			clock-names = "i2c";
+			pinctrl-0 = <&i2c2_bus>;
+			pinctrl-names = "default";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
+		hsotg: otg@ed200000 {
+			compatible = "samsung,s3c6400-hsotg";
+			reg = <0xed200000 0x20000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <24>;
+			clock-names = "otg";
+			clocks = <&clocks CLK_USB_OTG>;
+			phy-names = "usb2-phy";
+			phys = <&otgphy 0>;
+			status = "disabled";
+		};
+
+		otgphy: phy@ed300000 {
+			compatible = "samsung,s5pv210-usb2-phy";
+			reg = <0xed300000 0x100>;
+			samsung,pmureg-phandle = <&pmu_syscon>;
+			clocks = <&clocks CLK_USB_OTG>, <&xusbxti>;
+			clock-names = "phy", "ref";
+			#phy-cells = <1>;
+			status = "disabled";
+		};
+
+		sdhci0: sdhci@ed800000 {
+			compatible = "samsung,s3c6410-sdhci";
+			reg = <0xed800000 0x100000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <26>;
+			clock-names = "hsmmc", "mmc_busclk.0", "mmc_busclk.2";
+			clocks = <&clocks CLK_HSMMC0>, <&clocks CLK_HSMMC0>,
+					<&clocks SCLK_MMC0>;
+			status = "disabled";
+		};
+
+		sdhci1: sdhci@ed900000 {
+			compatible = "samsung,s3c6410-sdhci";
+			reg = <0xed900000 0x100000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <27>;
+			clock-names = "hsmmc", "mmc_busclk.0", "mmc_busclk.2";
+			clocks = <&clocks CLK_HSMMC1>, <&clocks CLK_HSMMC1>,
+					<&clocks SCLK_MMC1>;
+			status = "disabled";
+		};
+
+		sdhci2: sdhci@eda00000 {
+			compatible = "samsung,s3c6410-sdhci";
+			reg = <0xeda00000 0x100000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <28>;
+			clock-names = "hsmmc", "mmc_busclk.0", "mmc_busclk.2";
+			clocks = <&clocks CLK_HSMMC2>, <&clocks CLK_HSMMC2>,
+					<&clocks SCLK_MMC2>;
+			status = "disabled";
+		};
+
+		fimd: display-controller@ee000000 {
+			compatible = "samsung,s5pv210-fimd";
+			reg = <0xee000000 0x10000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <0>, <1>, <2>, <3>;
+			interrupt-names = "fifo", "vsync", "lcd_sys", "vp";
+			clock-names = "fimd", "sclk_fimd";
+			clocks = <&clocks CLK_FIMD>, <&clocks SCLK_FIMD>;
+			status = "disabled";
+		};
+
+		camera: camera {
+			compatible = "samsung,fimc", "simple-bus";
+			pinctrl-names = "default";
+			pinctrl-0 = <>;
+			clocks = <&clocks SCLK_CAM0>, <&clocks SCLK_CAM1>;
+			clock-names = "sclk_cam0", "sclk_cam1";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges;
+
+			clock_cam: clock-controller {
+				#clock-cells = <1>;
+			};
+
+			fimc0: fimc@ee400000 {
+				compatible = "samsung,s5pv210-fimc";
+				reg = <0xee400000 0x1000>;
+				interrupts = <5>;
+				interrupt-parent = <&vic2>;
+				clocks = <&clocks CLK_FIMC0>,
+						<&clocks SCLK_FIMC0>;
+				clock-names = "fimc",
+						"sclk_fimc";
+				samsung,pix-limits = <4224 8192 1920 4224>;
+				samsung,mainscaler-ext;
+				samsung,cam-if;
+			};
+
+			fimc1: fimc@ee500000 {
+				compatible = "samsung,s5pv210-fimc";
+				reg = <0xee500000 0x1000>;
+				interrupt-parent = <&vic2>;
+				interrupts = <6>;
+				clocks = <&clocks CLK_FIMC1>,
+						<&clocks SCLK_FIMC1>;
+				clock-names = "fimc",
+						"sclk_fimc";
+				samsung,pix-limits = <4224 8192 1920 4224>;
+				samsung,mainscaler-ext;
+				samsung,cam-if;
+			};
+
+			fimc2: fimc@ee600000 {
+				compatible = "samsung,s5pv210-fimc";
+				reg = <0xee600000 0x1000>;
+				interrupt-parent = <&vic2>;
+				interrupts = <7>;
+				clocks = <&clocks CLK_FIMC2>,
+						<&clocks SCLK_FIMC2>;
+				clock-names = "fimc",
+						"sclk_fimc";
+				samsung,pix-limits = <4224 8192 1920 4224>;
+				samsung,mainscaler-ext;
+				samsung,cam-if;
+				samsung,lcd-wb;
+			};
+		};
+
+		g2d: gpu@ef400000 {
+			compatible = "samsung,s5pv210-g2d";
+			reg = <0xef400000 0x1000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <9>;
+			clocks = <&clocks CLK_G2D>, <&clocks CLK_G2D>;
+			clock-names = "sclk_fimg2d", "fimg2d";
+		};
+
+		rotator: gpu@ef500000 {
+			compatible = "samsung,exynos4210-rotator";
+			reg = <0xef500000 0x1000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <4>;
+			clocks = <&clocks CLK_ROTATOR>;
+			clock-names = "rotator";
+		};
+
+		jpeg: jpeg@efc00000 {
+			compatible = "samsung,s5pv210-jpeg";
+			reg = <0xefc00000 0x1000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <8>;
+			clocks = <&clocks CLK_JPEG>;
+			clock-names = "jpeg";
+		};
+
+		tvenc: tv-encoder@f0000000 {
+			reg = <0xf0000000 0x1000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <15>;
+			clocks = <&clocks CLK_TVENC>, <&clocks SCLK_DAC>;
+		};
+
+		vp: video-processor@f0100000 {
+			reg = <0xf0100000 0x1000>;
+			clocks = <&clocks CLK_VP>;
+		};
+
+		mixer: display-controller@f0200000 {
+			reg = <0xf0200000 0x4000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <11>;
+			clocks = <&clocks CLK_MIXER>, <&clocks SCLK_MIXER>;
+		};
+
+		mfc: video-codec@f1000000 {
+			compatible = "samsung,s3c6400-mfc";
+			reg = <0xf1000000 0x1000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <14>;
+			clocks = <&clocks CLK_MFC>, <&clocks CLK_MFC>,
+					<&clocks CLK_MFC>;
+			clock-names = "per", "ahb", "special";
+		};
+
+		i2s1: i2s@f2200000 {
+			compatible = "samsung,s3c6410-i2s";
+			reg = <0xf2200000 0x100>;
+			interrupt-parent = <&vic2>;
+			interrupts = <17>;
+			dma-names = "tx", "rx";
+			dmas = <&pdma 13>, <&pdma 12>;
+			clock-names = "iis", "i2s_opclk0";
+			clocks = <&clocks CLK_I2S1>, <&clocks SCLK_AUDIO1>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2s1_bus>;
+			#sound-dai-cells = <0>;
+			status = "disabled";
+		};
+
+		pcm0: pcm@f2400000 {
+			reg = <0xf2400000 0x1000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <20>;
+			clocks = <&clocks CLK_PCM0>, <&clocks SCLK_AUDIO0>;
+			status = "disabled";
+		};
+
+		pcm1: pcm@f2500000 {
+			reg = <0xf2500000 0x1000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <21>;
+			clocks = <&clocks CLK_PCM1>, <&clocks SCLK_AUDIO1>;
+			status = "disabled";
+		};
+
+		adc: adc@f3000000 {
+			compatible = "samsung,exynos-adc-v1";
+			reg = <0xf3000000 0x100>, <0xe010e818 0x4>;
+			interrupt-parent = <&vic2>;
+			interrupts = <23>, <24>;
+			#io-channel-cells = <1>;
+			io-channel-ranges;
+			clocks = <&clocks CLK_TSADC>;
+			clock-names = "adc";
+			status = "disabled";
+		};
+
+		keypad: keypad@f3100000 {
+			compatible = "samsung,s5pv210-keypad";
+			reg = <0xf3100000 0x100>;
+			interrupt-parent = <&vic2>;
+			interrupts = <25>;
+			clock-names = "keypad";
+			clocks = <&clocks CLK_KEYIF>;
+			status = "disbled";
+		};
+
+		sss: crypto-engine@f4000000 {
+			reg = <0xf4000000 0x1000>;
+			interrupt-parent = <&vic2>;
+			interrupts = <27>, <28>;
+			clocks = <&clocks CLK_SECSS>;
+		};
+
+		seckey: security-key@f5000000 {
+			reg = <0xf5000000 0x1000>;
+			clocks = <&clocks CLK_SECKEY>;
+		};
+
+		arm-pmu {
+			compatible = "arm,arm1176-pmu";
+			interrupt-parent = <&vic1>;
+			interrupts = <0>;
+		};
+	};
+};
+
+#include "s5p6442-pinctrl.dtsi"
