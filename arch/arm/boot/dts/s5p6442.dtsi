@@ -1,0 +1,231 @@
+/*
+ * Samsung's S5P6442 SoC device tree source
+ *
+ * Samsung's S5P6442 SoC device nodes are listed in this file. S5P6442
+ * based board files can include this file and provide values for board specfic
+ * bindings.
+ *
+ * Note: This file does not include device nodes for all the controllers in
+ * S5P6442 SoC. As device tree coverage for S5P6442 increases, additional
+ * nodes can be added to this file.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include "skeleton.dtsi"
+#include <dt-bindings/clock/samsung,s5p6442-clock.h>
+
+/ {
+	aliases {
+		pinctrl0 = &pinctrl0;
+		i2c0 = &i2c_0;
+		i2c1 = &i2c_1;
+		i2c2 = &i2c_2;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,arm1176jzf-s";
+			reg = <0>;
+		};
+	};
+
+	soc {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		chipid@e0000000 {
+			compatible = "samsung,s5p6442-chipid";
+			reg = <0xe0000000 0x100>;
+		};
+
+		clocks: clock-controller@e0100000 {
+			compatible = "samsung,s5p6442-clock";
+			reg = <0xe0100000 0x10000>;
+			#clock-cells = <1>;
+		};
+
+		pinctrl0: pinctrl@e0200000 {
+			compatible = "samsung,s5p6442-pinctrl";
+			reg = <0xe0200000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <30>;
+
+			wakeup-interrupt-controller {
+				compatible = "samsung,exynos4210-wakeup-eint";
+				interrupts = <16>;
+				interrupt-parent = <&vic0>;
+			};
+		};
+
+		vic0: interrupt-controller@e4000000 {
+			compatible = "arm,pl192-vic";
+			interrupt-controller;
+			reg = <0xe4000000 0x1000>;
+			#interrupt-cells = <1>;
+		};
+
+		vic1: interrupt-controller@e4100000 {
+			compatible = "arm,pl192-vic";
+			interrupt-controller;
+			reg = <0xe4100000 0x1000>;
+			#interrupt-cells = <1>;
+		};
+
+		vic2: interrupt-controller@e4200000 {
+			compatible = "arm,pl192-vic";
+			interrupt-controller;
+			reg = <0xe4200000 0x1000>;
+			#interrupt-cells = <1>;
+		};
+
+		pwm: pwm@ea000000 {
+			compatible = "samsung,s5pc100-pwm";
+			reg = <0xea000000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <21>, <22>, <23>, <24>, <25>;
+			clock-names = "timers";
+			clocks = <&clocks PWM>;
+			#pwm-cells = <3>;
+		};
+
+		watchdog: watchdog@ea200000 {
+			compatible = "samsung,s3c2410-wdt";
+			reg = <0xea200000 0x1000>;
+			interrupt-parent = <&vic0>;
+			interrupts = <27>;
+			clock-names = "watchdog";
+			clocks = <&clocks WDT>;
+		};
+
+		rtc@ea300000 {
+			compatible = "samsung,s3c6410-rtc";
+			reg = <0xea300000 0x100>;
+			interrupt-parent = <&vic0>;
+			interrupts = <28>, <29>;
+			clocks = <&clocks RTC>;
+			clock-names = "rtc";
+		};
+
+		uart0: serial@ec000000 {
+			compatible = "samsung,s5pv210-uart";
+			reg = <0xec000000 0x400>;
+			interrupt-parent = <&vic1>;
+			interrupts = <10>;
+			clock-names = "uart", "clk_uart_baud0",
+					"clk_uart_baud1";
+			clocks = <&clocks UART0>, <&clocks UART0>,
+					<&clocks SCLK_UART0>;
+			status = "disabled";
+		};
+
+		uart1: serial@ec000400 {
+			compatible = "samsung,s5pv210-uart";
+			reg = <0xec000400 0x400>;
+			interrupt-parent = <&vic1>;
+			interrupts = <11>;
+			clock-names = "uart", "clk_uart_baud0",
+					"clk_uart_baud1";
+			clocks = <&clocks UART1>, <&clocks UART1>,
+					<&clocks SCLK_UART1>;
+			status = "disabled";
+		};
+
+		uart2: serial@ec000800 {
+			compatible = "samsung,s5pv210-uart";
+			reg = <0xec000800 0x400>;
+			interrupt-parent = <&vic1>;
+			interrupts = <12>;
+			clock-names = "uart", "clk_uart_baud0",
+					"clk_uart_baud1";
+			clocks = <&clocks UART2>, <&clocks UART2>,
+					<&clocks SCLK_UART2>;
+			status = "disabled";
+		};
+
+		i2c_0: i2c@ec100000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "samsung,s3c2440-i2c";
+			reg = <0xec100000 0x100>;
+			interrupt-parent = <&vic1>;
+			interrupts = <19>;
+			clocks = <&clocks I2C0>;
+			clock-names = "i2c";
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c0_bus>;
+			status = "disabled";
+		};
+
+		i2c_1: i2c@ec200000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "samsung,s3c2440-i2c";
+			reg = <0xec200000 0x100>;
+			interrupt-parent = <&vic1>;
+			interrupts = <20>;
+			clocks = <&clocks I2C1>;
+			clock-names = "i2c";
+			pinctrl-names = "default";
+			pinctrl-0 = <&i2c1_bus>;
+			status = "disabled";
+		};
+
+		i2c_2: i2c@ec600000 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "samsung,s3c2440-i2c";
+			reg = <0xec600000 0x100>;
+			interrupt-parent = <&vic1>;
+			interrupts = <21>;
+			clocks = <&clocks I2C2>;
+			clock-names = "i2c";
+			pinctrl-0 = <&i2c2_bus>;
+			pinctrl-names = "default";
+			status = "disabled";
+		};
+
+		sdhci0: sdhci@ed800000 {
+			compatible = "samsung,s5pv210-sdhci";
+			reg = <0xed800000 0x100000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <26>;
+			clock-names = "hsmmc", "mmc_busclk.0", "mmc_busclk.2";
+			clocks = <&clocks HSMMC0>, <&clocks HSMMC0>,
+					<&clocks SCLK_MMC0>;
+			status = "disabled";
+		};
+
+		sdhci1: sdhci@ed900000 {
+			compatible = "samsung,s5pv210-sdhci";
+			reg = <0xed900000 0x100000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <27>;
+			clock-names = "hsmmc", "mmc_busclk.0", "mmc_busclk.2";
+			clocks = <&clocks HSMMC1>, <&clocks HSMMC1>,
+					<&clocks SCLK_MMC1>;
+			status = "disabled";
+		};
+
+		sdhci2: sdhci@eda00000 {
+			compatible = "samsung,s5pv210-sdhci";
+			reg = <0xeda00000 0x100000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <28>;
+			clock-names = "hsmmc", "mmc_busclk.0", "mmc_busclk.2";
+			clocks = <&clocks HSMMC2>, <&clocks HSMMC2>,
+					<&clocks SCLK_MMC2>;
+			status = "disabled";
+		};
+	};
+};
+
+#include "s5p6442-pinctrl.dtsi"
