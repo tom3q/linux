@@ -15,7 +15,7 @@
  */
 
 #include "skeleton.dtsi"
-#include <dt-bindings/clock/samsung,s5p6442-clock.h>
+#include <dt-bindings/clock/samsung,s5pv210-clock.h>
 
 / {
 	aliases {
