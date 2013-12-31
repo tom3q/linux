@@ -218,7 +218,17 @@
 #define SCLK_USBPHY0	193
 #define SCLK_USBPHY1	194
 
+/* S5P6442-specific clocks */
+#define MOUT_D0SYNC	195
+#define MOUT_D1SYNC	196
+
+#define DOUT_MIXER	197
+
+#define ETB		198
+#define ETM		199
+#define I2C1		200
+
 /* Total number of clocks. */
-#define NR_CLKS (SCLK_USBPHY1 + 1)
+#define NR_CLKS		201
 
 #endif /* _DT_BINDINGS_CLOCK_SAMSUNG_S5PV210_CLOCK_H */
