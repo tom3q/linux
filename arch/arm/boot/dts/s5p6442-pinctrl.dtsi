@@ -220,51 +220,6 @@
 		#gpio-cells = <2>;
 	};
 
-	mp10: mp10 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
-	mp11: mp11 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
-	mp12: mp12 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
-	mp13: mp13 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
-	mp14: mp14 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
-	mp15: mp15 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
-	mp16: mp16 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
-	mp17: mp17 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
-	mp18: mp18 {
-		gpio-controller;
-		#gpio-cells = <2>;
-	};
-
 	gph0: gph0 {
 		gpio-controller;
 			interrupt-controller;
