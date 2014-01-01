@@ -22,7 +22,11 @@
 	 */
 
 	.macro addruart, rp, rv, tmp
-		ldr	\rp, = S3C_PA_UART
+		mrc	p15, 0, \tmp, c0, c0, 0
+		and	\tmp, \tmp, #0xf000
+		teq	\tmp, #0xc000		@@ Cortex
+		ldreq	\rp, =S5PV210_PA_UART
+		movne	\rp, #S5P6442_PA_UART
 		ldr	\rv, = S3C_VA_UART
 #if CONFIG_DEBUG_S3C_UART != 0
 		add	\rp, \rp, #(0x400 * CONFIG_DEBUG_S3C_UART)

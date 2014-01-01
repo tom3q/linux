@@ -14,15 +14,29 @@
 #define __ASM_ARCH_UNCOMPRESS_H
 
 #include <mach/map.h>
+#include <plat/cpu.h>
 #include <plat/uncompress.h>
+
+static unsigned int __raw_readl(unsigned int ptr)
+{
+	return *((volatile unsigned int *)ptr);
+}
 
 static void arch_detect_cpu(void)
 {
-	/* we do not need to do any cpu detection here at the moment. */
+	u32 chip_id = __raw_readl(S5P_PA_CHIPID) & S5PV210_CPU_MASK;
+	u32 uart_nr = CONFIG_S3C_LOWLEVEL_UART_PORT;
+	u32 uart_pa;
+
 	fifo_mask = S5PV210_UFSTAT_TXMASK;
 	fifo_max = 63 << S5PV210_UFSTAT_TXSHIFT;
 
-	uart_base = (volatile u8 *)S5P_PA_UART(CONFIG_S3C_LOWLEVEL_UART_PORT);
+	if (chip_id == S5PV210_CPU_ID)
+		uart_pa = S5PV210_PA_UART;
+	else
+		uart_pa = S5P6442_PA_UART;
+
+	uart_base = (volatile u8 *)(uart_pa + uart_nr * S3C_UART_OFFSET);
 }
 
 #endif /* __ASM_ARCH_UNCOMPRESS_H */
