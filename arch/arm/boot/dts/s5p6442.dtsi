@@ -162,6 +162,7 @@
 		chipid@e0000000 {
 			compatible = "samsung,s5pv210-chipid";
 			reg = <0xe0000000 0x100>;
+			clocks = <&clocks CHIPID>;
 		};
 
 		clocks: clock-controller@e0100000 {
@@ -175,6 +176,7 @@
 			reg = <0xe0200000 0x1000>;
 			interrupt-parent = <&vic0>;
 			interrupts = <30>;
+			clocks = <&clocks GPIO>;
 
 			wakeup-interrupt-controller {
 				compatible = "samsung,exynos4210-wakeup-eint";
@@ -187,6 +189,7 @@
 			compatible = "arm,pl192-vic";
 			interrupt-controller;
 			reg = <0xe4000000 0x1000>;
+			clocks = <&clocks VIC0>;
 			#interrupt-cells = <1>;
 		};
 
@@ -194,6 +197,7 @@
 			compatible = "arm,pl192-vic";
 			interrupt-controller;
 			reg = <0xe4100000 0x1000>;
+			clocks = <&clocks VIC1>;
 			#interrupt-cells = <1>;
 		};
 
@@ -201,6 +205,7 @@
 			compatible = "arm,pl192-vic";
 			interrupt-controller;
 			reg = <0xe4200000 0x1000>;
+			clocks = <&clocks VIC2>;
 			#interrupt-cells = <1>;
 		};
 
@@ -240,8 +245,10 @@
 			reg = <0xea000000 0x1000>;
 			interrupt-parent = <&vic0>;
 			interrupts = <21>, <22>, <23>, <24>, <25>;
-			clock-names = "timers";
-			clocks = <&clocks PWM>;
+			clock-names = "timers", "pwm-tclk0",
+					"pwm-tclk1";
+			clocks = <&clocks PWM>, <&clocks SCLK_PWM>,
+					<&clocks SCLK_PWM>;
 			#pwm-cells = <3>;
 		};
 
