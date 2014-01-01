@@ -26,7 +26,7 @@ obj-$(CONFIG_MACH_SMDKC110)	+= mach-smdkc110.o
 obj-$(CONFIG_MACH_SMDKV210)	+= mach-smdkv210.o
 obj-$(CONFIG_MACH_TORBRECK)	+= mach-torbreck.o
 obj-$(CONFIG_MACH_S5PV210_DT)	+= mach-s5pv210-dt.o
-obj-$(CONFIG_MACH_S5P6442_DT)	+= mach-s5p6442-dt.o
+obj-$(CONFIG_MACH_S5P6442_DT)	+= mach-s5pv210-dt.o
 # device support
 
 obj-y				+= dev-audio.o

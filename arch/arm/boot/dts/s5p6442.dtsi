@@ -43,7 +43,7 @@
 		ranges;
 
 		chipid@e0000000 {
-			compatible = "samsung,s5p6442-chipid";
+			compatible = "samsung,s5pv210-chipid";
 			reg = <0xe0000000 0x100>;
 		};
 

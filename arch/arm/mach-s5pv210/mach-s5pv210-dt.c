@@ -64,29 +64,33 @@ static void __init s5pv210_dt_init_irq(void)
 	s5p_init_cpu(chipid_base);
 	iounmap(chipid_base);
 
-	if (!soc_is_s5pv210())
+	if ((of_machine_is_compatible("samsung,s5pc110")
+	    || of_machine_is_compatible("samsung,s5pv210"))
+	    && !soc_is_s5pv210())
 		panic("SoC is not S5PV210/S5PC110!");
 
-	of_clk_init(NULL);
+	if (of_machine_is_compatible("samsung,s5p6442")
+	    && !soc_is_s5p6442())
+		panic("SoC is not S5P6442!");
+
 	irqchip_init();
 };
 
-static void __init s5pv210_dt_init_machine(void)
-{
-	of_platform_populate(NULL, of_default_bus_match_table, NULL, NULL);
-}
-
 static char const *s5pv210_dt_compat[] __initconst = {
+#ifdef CONFIG_MACH_S5PV210_DT
 	"samsung,s5pc110",
 	"samsung,s5pv210",
+#endif
+#ifdef CONFIG_MACH_S5P6442_DT
+	"samsung,s5p6442",
+#endif
 	NULL
 };
 
-DT_MACHINE_START(S3C6400_DT, "Samsung S5PV210/S5PC110 (Flattened Device Tree)")
+DT_MACHINE_START(S3C6400_DT, "Samsung S5PV210/S5PC110/S5P6442 (Flattened Device Tree)")
 	/* Maintainer: Mateusz Krawczuk <m.krawczuk@partner.samsung.com> */
-	.dt_compat  = s5pv210_dt_compat,
-	.map_io    = s5pv210_dt_map_io,
-	.init_irq  = s5pv210_dt_init_irq,
-	.init_machine  = s5pv210_dt_init_machine,
-	.restart        = s5pv210_restart,
+	.dt_compat = s5pv210_dt_compat,
+	.map_io = s5pv210_dt_map_io,
+	.init_irq = s5pv210_dt_init_irq,
+	.restart = s5pv210_restart,
 MACHINE_END
