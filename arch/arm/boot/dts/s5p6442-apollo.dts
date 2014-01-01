@@ -48,6 +48,8 @@
 };
 
 &uart1 {
+	pinctrl-0 = <&uart1_data>;
+	pinctrl-names = "default";
 	status = "okay";
 };
 
