@@ -47,7 +47,7 @@
 	};
 };
 
-&uart2 {
+&uart1 {
 	status = "okay";
 };
 
