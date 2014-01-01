@@ -42,6 +42,28 @@
 		#size-cells = <1>;
 		ranges;
 
+		external-clocks {
+			compatible = "simple-bus";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			xxti: oscillator@0 {
+				compatible = "fixed-clock";
+				reg = <0>;
+				clock-output-names = "xxti";
+				#clock-cells = <0>;
+				status = "disabled";
+			};
+
+			xusbxti: oscillator@1 {
+				compatible = "fixed-clock";
+				reg = <1>;
+				clock-output-names = "xusbxti";
+				#clock-cells = <0>;
+				status = "disabled";
+			};
+		};
+
 		chipid@e0000000 {
 			compatible = "samsung,s5pv210-chipid";
 			reg = <0xe0000000 0x100>;
