@@ -20,7 +20,7 @@
 
 / {
 	model = "Samsung Galaxy Apollo";
-	compatible = "samsung,apollo", "samsung,s5pv210";
+	compatible = "samsung,apollo", "samsung,s5p6442";
 
 	chosen {
 		bootargs = "console=ttySAC2,115200n8 root=/dev/mmcblk0p1 rw rootwait ignore_loglevel earlyprintk";
