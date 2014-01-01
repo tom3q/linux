@@ -1742,7 +1742,7 @@ static struct s3c24xx_serial_drv_data s3c6400_serial_drv_data = {
 #define S3C6400_SERIAL_DRV_DATA (kernel_ulong_t)NULL
 #endif
 
-#ifdef CONFIG_CPU_S5PV210
+#ifdef CONFIG_ARCH_S5PV210
 static struct s3c24xx_serial_drv_data s5pv210_serial_drv_data = {
 	.info = &(struct s3c24xx_uart_info) {
 		.name		= "Samsung S5PV210 UART",
