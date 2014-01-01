@@ -24,6 +24,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/amba/bus.h>
 #include <linux/amba/pl330.h>
+#include <linux/of.h>
 
 #include <asm/irq.h>
 #include <plat/devs.h>
@@ -117,6 +118,9 @@ static AMBA_AHB_DEVICE(s5pv210_pdma1, "dma-pl330.1", 0x00041330,
 
 static int __init s5pv210_dma_init(void)
 {
+	if (of_have_populated_dt())
+		return 0;
+
 	dma_cap_set(DMA_SLAVE, s5pv210_pdma0_pdata.cap_mask);
 	dma_cap_set(DMA_CYCLIC, s5pv210_pdma0_pdata.cap_mask);
 	amba_device_register(&s5pv210_pdma0_device, &iomem_resource);
