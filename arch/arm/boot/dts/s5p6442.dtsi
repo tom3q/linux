@@ -194,7 +194,7 @@
 		};
 
 		sdhci0: sdhci@ed800000 {
-			compatible = "samsung,s5pv210-sdhci";
+			compatible = "samsung,s3c6410-sdhci";
 			reg = <0xed800000 0x100000>;
 			interrupt-parent = <&vic1>;
 			interrupts = <26>;
@@ -205,7 +205,7 @@
 		};
 
 		sdhci1: sdhci@ed900000 {
-			compatible = "samsung,s5pv210-sdhci";
+			compatible = "samsung,s3c6410-sdhci";
 			reg = <0xed900000 0x100000>;
 			interrupt-parent = <&vic1>;
 			interrupts = <27>;
@@ -216,7 +216,7 @@
 		};
 
 		sdhci2: sdhci@eda00000 {
-			compatible = "samsung,s5pv210-sdhci";
+			compatible = "samsung,s3c6410-sdhci";
 			reg = <0xeda00000 0x100000>;
 			interrupt-parent = <&vic1>;
 			interrupts = <28>;
