@@ -104,6 +104,12 @@ static struct fimd_driver_data s3c64xx_fimd_driver_data = {
 	.has_limited_fmt = 1,
 };
 
+static struct fimd_driver_data s5pv210_fimd_driver_data = {
+	.timing_base = 0x0,
+	.has_shadowcon = 1,
+	.has_clksel = 1,
+};
+
 static struct fimd_driver_data exynos4_fimd_driver_data = {
 	.timing_base = 0x0,
 	.lcdblk_offset = 0x210,
@@ -168,6 +174,8 @@ struct fimd_context {
 static const struct of_device_id fimd_driver_dt_match[] = {
 	{ .compatible = "samsung,s3c6400-fimd",
 	  .data = &s3c64xx_fimd_driver_data },
+	{ .compatible = "samsung,s5pv210-fimd",
+	  .data = &s5pv210_fimd_driver_data },
 	{ .compatible = "samsung,exynos4210-fimd",
 	  .data = &exynos4_fimd_driver_data },
 	{ .compatible = "samsung,exynos5250-fimd",
