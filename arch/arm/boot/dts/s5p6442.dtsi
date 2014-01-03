@@ -380,12 +380,15 @@
 			interrupts = <24>;
 			clock-names = "otg";
 			clocks = <&clocks USB_OTG>;
+			phy-names = "usb2-phy";
+			phys = <&otgphy 0>;
 			status = "disabled";
 		};
 
 		otgphy: phy@ed300000 {
 			compatible = "samsung,s5pv210-usb2-phy";
 			reg = <0xed300000 0x100>;
+			samsung,pmureg-phandle = <&pmu_syscon>;
 			clocks = <&clocks USB_OTG>, <&xusbxti>, <&xusbxti>;
 			clock-names = "phy", "device", "host";
 			#phy-cells = <1>;
