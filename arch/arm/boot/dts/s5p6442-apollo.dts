@@ -231,8 +231,7 @@
 			compatible = "faraday,fsa9480";
 			reg = <0x25>;
 			interrupt-parent = <&gph2>;
-			interrupts = <7>;
-			// TODO
+			interrupts = <7 0>;
 		};
 	};
 
