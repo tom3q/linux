@@ -266,7 +266,7 @@ PNAME(mout_vpll_6442_p) = {
 };
 
 PNAME(mout_mixer_6442_p) = {
-	"mout_dac",
+	"mout_vpll",
 	"dout_mixer"
 };
 
@@ -276,12 +276,12 @@ PNAME(fin_pll_p) = {
 };
 
 PNAME(mout_d0sync_6442_p) = {
-	"mout_d0",
+	"mout_dsys",
 	"div_apll"
 };
 
 PNAME(mout_d1sync_6442_p) = {
-	"mout_d1",
+	"mout_psys",
 	"div_apll"
 };
 
@@ -452,9 +452,7 @@ FIXED_RATE_CLOCKS(s5p6442_fixed_rate_clks) __initdata = {
 /* Common DIV clocks. */
 DIV_CLOCKS(div_clks) __initdata = {
 	DIV(DOUT_PCLKP, "dout_pclkp", "dout_hclkp", CLK_DIV0, 28, 3),
-	DIV(DOUT_HCLKP, "dout_hclkp", "mout_psys", CLK_DIV0, 24, 4),
 	DIV(DOUT_PCLKD, "dout_pclkd", "dout_hclkd", CLK_DIV0, 20, 3),
-	DIV(DOUT_HCLKD, "dout_hclkd", "mout_dsys", CLK_DIV0, 16, 4),
 	DIV(DOUT_A2M, "dout_a2m", "mout_apll", CLK_DIV0, 4, 3),
 	DIV(DOUT_APLL, "dout_apll", "mout_msys", CLK_DIV0, 0, 3),
 
@@ -483,6 +481,8 @@ DIV_CLOCKS(div_clks) __initdata = {
 
 /* S5PC110/S5PC210-specific DIV clocks. */
 DIV_CLOCKS(s5pv210_div_clks) __initdata = {
+	DIV(DOUT_HCLKP, "dout_hclkp", "mout_psys", CLK_DIV0, 24, 4),
+	DIV(DOUT_HCLKD, "dout_hclkd", "mout_dsys", CLK_DIV0, 16, 4),
 	DIV(DOUT_PCLKM, "dout_pclkm", "dout_hclkm", CLK_DIV0, 12, 3),
 	DIV(DOUT_HCLKM, "dout_hclkm", "dout_apll", CLK_DIV0, 8, 3),
 
@@ -510,6 +510,9 @@ DIV_CLOCKS(s5pv210_div_clks) __initdata = {
 
 /* S5P6442-specific DIV clocks. */
 DIV_CLOCKS(s5p6442_div_clks) __initdata = {
+	DIV(DOUT_HCLKP, "dout_hclkp", "mout_d1sync", CLK_DIV0, 24, 4),
+	DIV(DOUT_HCLKD, "dout_hclkd", "mout_d0sync", CLK_DIV0, 16, 4),
+
 	DIV(DOUT_MIXER, "dout_mixer", "mout_vpll", CLK_DIV1, 0, 4),
 };
 
@@ -519,9 +522,6 @@ GATE_CLOCKS(gate_clks) __initdata = {
 	GATE(FIMC2, "fimc2", "dout_hclkd", CLK_GATE_IP0, 26, 0, 0),
 	GATE(FIMC1, "fimc1", "dout_hclkd", CLK_GATE_IP0, 25, 0, 0),
 	GATE(FIMC0, "fimc0", "dout_hclkd", CLK_GATE_IP0, 24, 0, 0),
-	GATE(MFC, "mfc", "dout_hclkm", CLK_GATE_IP0, 16, 0, 0),
-	GATE(G3D, "g3d", "dout_hclkm", CLK_GATE_IP0, 8, 0, 0),
-	GATE(IMEM, "imem", "dout_hclkm", CLK_GATE_IP0, 5, 0, 0),
 	GATE(PDMA0, "pdma0", "dout_hclkp", CLK_GATE_IP0, 3, 0, 0),
 	GATE(MDMA, "mdma", "dout_hclkd", CLK_GATE_IP0, 2, 0, 0),
 
@@ -574,7 +574,6 @@ GATE_CLOCKS(gate_clks) __initdata = {
 	GATE_SCLK(SCLK_FIMD, "sclk_fimd", "dout_fimd", CLK_SRC_MASK0, 5),
 	GATE_SCLK(SCLK_CAM1, "sclk_cam1", "dout_cam1", CLK_SRC_MASK0, 4),
 	GATE_SCLK(SCLK_CAM0, "sclk_cam0", "dout_cam0", CLK_SRC_MASK0, 3),
-	GATE_SCLK(SCLK_DAC, "sclk_dac", "mout_dac", CLK_SRC_MASK0, 2),
 	GATE_SCLK(SCLK_MIXER, "sclk_mixer", "mout_mixer", CLK_SRC_MASK0, 1),
 
 	GATE_SCLK(SCLK_FIMC2, "sclk_fimc2", "dout_fimc2", CLK_SRC_MASK1, 4),
@@ -584,7 +583,10 @@ GATE_CLOCKS(gate_clks) __initdata = {
 
 GATE_CLOCKS(s5pv210_gate_clks) __initdata = {
 	GATE(CSIS, "clk_csis", "dout_hclkd", CLK_GATE_IP0, 31, 0, 0),
+	GATE(MFC, "mfc", "dout_hclkm", CLK_GATE_IP0, 16, 0, 0),
 	GATE(G2D, "g2d", "dout_hclkd", CLK_GATE_IP0, 12, 0, 0),
+	GATE(G3D, "g3d", "dout_hclkm", CLK_GATE_IP0, 8, 0, 0),
+	GATE(IMEM, "imem", "dout_hclkm", CLK_GATE_IP0, 5, 0, 0),
 	GATE(PDMA1, "pdma1", "dout_hclkp", CLK_GATE_IP0, 4, 0, 0),
 
 	GATE(NFCON, "nfcon", "dout_hclkp", CLK_GATE_IP1, 28, 0, 0),
@@ -631,16 +633,23 @@ GATE_CLOCKS(s5pv210_gate_clks) __initdata = {
 	GATE_SCLK(SCLK_UART3, "sclk_uart3", "dout_uart3", CLK_SRC_MASK0, 15),
 	GATE_SCLK(SCLK_MMC3, "sclk_mmc3", "dout_mmc3", CLK_SRC_MASK0, 11),
 	GATE_SCLK(SCLK_CSIS, "sclk_csis", "dout_csis", CLK_SRC_MASK0, 6),
+	GATE_SCLK(SCLK_DAC, "sclk_dac", "mout_dac", CLK_SRC_MASK0, 2),
 	GATE_SCLK(SCLK_HDMI, "sclk_hdmi", "mout_hdmi", CLK_SRC_MASK0, 0),
 };
 
 GATE_CLOCKS(s5p6442_gate_clks) __initdata = {
 	GATE(JPEG, "jpeg", "dout_hclkd", CLK_GATE_IP0, 28, 0, 0),
+	GATE(MFC, "mfc", "dout_hclkd", CLK_GATE_IP0, 16, 0, 0),
+	GATE(G2D, "g2d", "dout_hclkd", CLK_GATE_IP0, 12, 0, 0),
+	GATE(G3D, "g3d", "dout_hclkd", CLK_GATE_IP0, 8, 0, 0),
+	GATE(IMEM, "imem", "dout_hclkd", CLK_GATE_IP0, 5, 0, 0),
 
 	GATE(ETB, "etb", "dout_hclkd", CLK_GATE_IP1, 31, 0, 0),
 	GATE(ETM, "etm", "dout_hclkd", CLK_GATE_IP1, 30, 0, 0),
 
 	GATE(I2C1, "i2c1", "dout_pclkp", CLK_GATE_IP3, 8, 0, 0),
+
+	GATE_SCLK(SCLK_DAC, "sclk_dac", "mout_vpll", CLK_SRC_MASK0, 2),
 };
 
 /* list of all clocks aliases */
