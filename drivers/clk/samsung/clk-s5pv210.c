@@ -260,6 +260,11 @@ PNAME(mout_mixer_p) = {
 	"mout_hdmi"
 };
 
+PNAME(mout_vpll_6442_p) = {
+	"fin_pll",
+	"fout_vpll"
+};
+
 PNAME(mout_mixer_6442_p) = {
 	"mout_dac",
 	"dout_mixer"
@@ -348,7 +353,6 @@ MUX_CLOCKS(mux_clks) __initdata = {
 	MUX(MOUT_PSYS, "mout_psys", mout_group4_p, CLK_SRC0, 24, 1),
 	MUX(MOUT_DSYS, "mout_dsys", mout_group4_p, CLK_SRC0, 20, 1),
 	MUX(MOUT_MSYS, "mout_msys", mout_group3_p, CLK_SRC0, 16, 1),
-	MUX(MOUT_VPLL, "mout_vpll", mout_vpll_p, CLK_SRC0, 12, 1),
 	MUX(MOUT_EPLL, "mout_epll", mout_epll_p, CLK_SRC0, 8, 1),
 	MUX(MOUT_MPLL, "mout_mpll", mout_mpll_p, CLK_SRC0, 4, 1),
 	MUX(MOUT_APLL, "mout_apll", mout_apll_p, CLK_SRC0, 0, 1),
@@ -356,6 +360,8 @@ MUX_CLOCKS(mux_clks) __initdata = {
 
 /* S5PC110/S5PV210-specific MUX clocks */
 MUX_CLOCKS(s5pv210_mux_clks) __initdata = {
+	MUX(MOUT_VPLL, "mout_vpll", mout_vpll_p, CLK_SRC0, 12, 1),
+
 	MUX(MOUT_VPLLSRC, "mout_vpllsrc", mout_vpllsrc_p, CLK_SRC1, 28, 1),
 	MUX(MOUT_CSIS, "mout_csis", mout_group2_p, CLK_SRC1, 24, 4),
 	MUX(MOUT_FIMD, "mout_fimd", mout_group2_p, CLK_SRC1, 20, 4),
@@ -397,6 +403,8 @@ MUX_CLOCKS(s5pv210_mux_clks) __initdata = {
 
 /* S5P6442-specific MUX clocks */
 MUX_CLOCKS(s5p6442_mux_clks) __initdata = {
+	MUX(MOUT_VPLL, "mout_vpll", mout_vpll_6442_p, CLK_SRC0, 12, 1),
+
 	MUX(MOUT_FIMD, "mout_fimd", mout_group2_6442_p, CLK_SRC1, 20, 4),
 	MUX(MOUT_CAM1, "mout_cam1", mout_group2_6442_p, CLK_SRC1, 16, 4),
 	MUX(MOUT_CAM0, "mout_cam0", mout_group2_6442_p, CLK_SRC1, 12, 4),
@@ -767,7 +775,7 @@ static struct samsung_pll_clock s5p6442_pll_clks[] __initdata = {
 						MPLL_LOCK, MPLL_CON, NULL),
 	[epll] = PLL(pll_4500, FOUT_EPLL, "fout_epll", "fin_pll",
 						EPLL_LOCK, EPLL_CON0, NULL),
-	[vpll] = PLL(pll_4500, FOUT_VPLL, "fout_vpll", "mout_vpllsrc",
+	[vpll] = PLL(pll_4500, FOUT_VPLL, "fout_vpll", "fin_pll",
 						VPLL_LOCK, VPLL_CON0, NULL),
 };
 
