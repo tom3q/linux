@@ -136,7 +136,7 @@ PNAME(mout_vpllsrc_p) = {
 };
 
 PNAME(mout_vpll_p) = {
-	"fin_pll",
+	"mout_vpllsrc",
 	"fout_vpll"
 };
 
