@@ -391,7 +391,6 @@
 
 &xusbxti {
 	clock-frequency = <12000000>;
-	status = "okay";
 };
 
 &onenand {
