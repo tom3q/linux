@@ -3446,6 +3446,7 @@ static int s3c_hsotg_probe(struct platform_device *pdev)
 	hsotg->gadget.max_speed = USB_SPEED_HIGH;
 	hsotg->gadget.ops = &s3c_hsotg_gadget_ops;
 	hsotg->gadget.name = dev_name(dev);
+	hsotg->gadget.dev.of_node = hsotg->dev->of_node;
 
 	/* reset the system */
 
