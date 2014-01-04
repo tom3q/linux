@@ -60,8 +60,8 @@
 		pmic@66 {
 			compatible = "maxim,max8998";
 			reg = <0x66>;
-			interrupt-parent = <&pmic_interrupts>;
-			interrupts = <0>, <1>;
+			interrupt-parent = <&gph0>;
+			interrupts = <7 0>;
 
 			max8998,pmic-buck1-default-dvs-idx = <0>;
 			max8998,pmic-buck1-dvs-gpios = <&gph0 2 0>, <&gph0 3 0>;
@@ -71,14 +71,6 @@
 			max8998,pmic-buck2-default-dvs-idx = <0>;
 			max8998,pmic-buck2-dvs-gpio = <&gph0 4 0>;
 			max8998,pmic-buck2-dvs-voltage = <1200000>, <1200000>;
-
-			pmic_interrupts: interrupt-map {
-				#address-cells = <0>;
-				#size-cells = <0>;
-				#interrupt-cells = <1>;
-				interrupt-map = <0 &gph0 7 0>,
-						<1 &gph2 6 0>;
-			};
 
 			regulators {
 				ldo2_reg: LDO2 {
