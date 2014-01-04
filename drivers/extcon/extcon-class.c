@@ -29,6 +29,7 @@
 #include <linux/fs.h>
 #include <linux/err.h>
 #include <linux/extcon.h>
+#include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/of.h>
@@ -982,27 +983,29 @@ EXPORT_SYMBOL_GPL(devm_extcon_dev_unregister);
  */
 struct extcon_dev *extcon_get_edev_by_phandle(struct device *dev, int index)
 {
-	struct device_node *node;
 	struct extcon_dev *edev;
+	struct device_node *node;
 
 	if (!dev->of_node) {
-		dev_err(dev, "device does not have a device node entry\n");
-		return ERR_PTR(-EINVAL);
+		dev_dbg(dev, "device does not have a device node entry\n");
+		return ERR_PTR(-ENOENT);
 	}
 
 	node = of_parse_phandle(dev->of_node, "extcon", index);
 	if (!node) {
-		dev_err(dev, "failed to get phandle in %s node\n",
+		dev_dbg(dev, "failed to get phandle in %s node\n",
 			dev->of_node->full_name);
-		return ERR_PTR(-ENODEV);
+		return ERR_PTR(-EINVAL);
 	}
 
-	edev = extcon_get_extcon_dev(node->name);
-	if (!edev) {
-		dev_err(dev, "unable to get extcon device : %s\n", node->name);
-		return ERR_PTR(-ENODEV);
+	mutex_lock(&extcon_dev_list_lock);
+	list_for_each_entry(edev, &extcon_dev_list, entry) {
+		if (edev->dev.parent && edev->dev.parent->of_node == node)
+			goto found;
 	}
-
+	edev = ERR_PTR(-EPROBE_DEFER);
+found:
+	mutex_unlock(&extcon_dev_list_lock);
 	return edev;
 }
 #else
