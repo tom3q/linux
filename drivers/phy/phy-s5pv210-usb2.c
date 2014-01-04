@@ -130,7 +130,7 @@ static void s5pv210_phy_pwr(struct samsung_usb2_phy_instance *inst, bool on)
 	};
 
 	if (on) {
-		writel(inst->clk, drv->reg_phy + S5PV210_UPHYCLK);
+		writel(inst->clk_reg_val, drv->reg_phy + S5PV210_UPHYCLK);
 
 		pwr = readl(drv->reg_phy + S5PV210_UPHYPWR);
 		pwr &= ~phypwr;
