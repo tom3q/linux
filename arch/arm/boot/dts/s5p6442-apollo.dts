@@ -32,7 +32,7 @@
 	};
 
 	chosen {
-		bootargs = "console=ttySAC1,115200n8 root=/dev/mmcblk0p1 rw rootwait ignore_loglevel earlyprintk";
+		bootargs = "console=ttySAC1,115200n8 console=tty1 root=/dev/mmcblk0p1 rw rootwait ignore_loglevel earlyprintk";
 	};
 
 	memory {
