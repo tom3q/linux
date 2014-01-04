@@ -29,6 +29,7 @@
 #include <linux/fs.h>
 #include <linux/err.h>
 #include <linux/extcon.h>
+#include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 
@@ -392,6 +393,44 @@ out:
 	return sd;
 }
 EXPORT_SYMBOL_GPL(extcon_get_extcon_dev);
+
+#ifdef CONFIG_OF_EXTCON
+/*
+ * of_extcon_get_extcon_dev - Get the name of extcon device from devicetree
+ * @dev - instance to the given device
+ * @index - index into list of extcon_dev
+ *
+ * return the instance of extcon device
+ */
+struct extcon_dev *of_extcon_get_extcon_dev(struct device *dev, int index)
+{
+	struct extcon_dev *sd;
+	struct device_node *node;
+
+	if (!dev->of_node) {
+		dev_dbg(dev, "device does not have a device node entry\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	node = of_parse_phandle(dev->of_node, "extcon", index);
+	if (!node) {
+		dev_dbg(dev, "failed to get phandle in %s node\n",
+			dev->of_node->full_name);
+		return ERR_PTR(-ENODEV);
+	}
+
+	mutex_lock(&extcon_dev_list_lock);
+	list_for_each_entry(sd, &extcon_dev_list, entry) {
+		if (sd->dev.parent && sd->dev.parent->of_node == node)
+			goto out;
+	}
+	sd = NULL;
+out:
+	mutex_unlock(&extcon_dev_list_lock);
+	return sd;
+}
+EXPORT_SYMBOL_GPL(of_extcon_get_extcon_dev);
+#endif
 
 static int _call_per_cable(struct notifier_block *nb, unsigned long val,
 			   void *ptr)
