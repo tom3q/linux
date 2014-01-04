@@ -228,7 +228,7 @@
 		};
 
 		musb@25 {
-			compatible = "faraday,fsa9480";
+			compatible = "fcs,fsa9480";
 			reg = <0x25>;
 			interrupt-parent = <&gph2>;
 			interrupts = <7 0>;
