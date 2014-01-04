@@ -480,6 +480,7 @@
 	bus-width = <4>;
 	cd-gpios = <&gph2 0 GPIO_ACTIVE_LOW>;
 	cd-inverted;
+	vmmc-supply = <&ldo5_reg>;
 	pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_bus1 &sd2_bus4>;
 	pinctrl-names = "default";
 	status = "okay";
