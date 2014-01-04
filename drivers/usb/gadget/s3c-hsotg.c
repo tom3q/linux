@@ -3017,6 +3017,8 @@ static int s3c_hsotg_udc_start(struct usb_gadget *gadget,
 	hsotg->gadget.dev.of_node = hsotg->dev->of_node;
 	hsotg->gadget.speed = USB_SPEED_UNKNOWN;
 
+	clk_prepare_enable(hsotg->clk);
+
 	ret = regulator_bulk_enable(ARRAY_SIZE(hsotg->supplies),
 				    hsotg->supplies);
 	if (ret) {
@@ -3063,6 +3065,8 @@ static int s3c_hsotg_udc_stop(struct usb_gadget *gadget,
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 
 	regulator_bulk_disable(ARRAY_SIZE(hsotg->supplies), hsotg->supplies);
+
+	clk_disable_unprepare(hsotg->clk);
 
 	return 0;
 }
@@ -3682,6 +3686,8 @@ static int s3c_hsotg_probe(struct platform_device *pdev)
 		goto err_ep_mem;
 	}
 
+	clk_disable_unprepare(hsotg->clk);
+
 	s3c_hsotg_phy_disable(hsotg);
 
 	ret = usb_add_gadget_udc(&pdev->dev, &hsotg->gadget);
@@ -3722,7 +3728,6 @@ static int s3c_hsotg_remove(struct platform_device *pdev)
 	}
 
 	s3c_hsotg_phy_disable(hsotg);
-	clk_disable_unprepare(hsotg->clk);
 
 	return 0;
 }
