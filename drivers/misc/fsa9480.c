@@ -426,13 +426,6 @@ static int fsa9480_probe(struct i2c_client *client,
 	usbsw->client = client;
 	usbsw->pdata = client->dev.platform_data;
 
-	if (!usbsw->pdata && client->dev.of_node) {
-		usbsw->pdata = devm_kzalloc(&client->dev,
-					sizeof(*usbsw->pdata), GFP_KERNEL);
-		if (!usbsw->pdata)
-			goto fail1;
-	}
-
 	chip = usbsw;
 
 	i2c_set_clientdata(client, usbsw);
@@ -539,17 +532,10 @@ static const struct i2c_device_id fsa9480_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, fsa9480_id);
 
-static const struct of_device_id fsa9480_of_match[] = {
-	{ .compatible = "faraday,fsa9480", },
-	{ },
-};
-MODULE_DEVICE_TABLE(of, fsa9480_of_match);
-
 static struct i2c_driver fsa9480_i2c_driver = {
 	.driver = {
 		.name = "fsa9480",
 		.pm = FSA9480_PM_OPS,
-		.of_match_table = fsa9480_of_match,
 	},
 	.probe = fsa9480_probe,
 	.remove = fsa9480_remove,
