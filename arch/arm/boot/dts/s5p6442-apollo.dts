@@ -219,7 +219,7 @@
 			};
 		};
 
-		musb@25 {
+		fsa9480: musb@25 {
 			compatible = "fcs,fsa9480";
 			reg = <0x25>;
 			interrupt-parent = <&gph2>;
@@ -462,6 +462,7 @@
 &hsotg {
 	vusb_a-supply = <&ldo3_reg>;
 	vusb_d-supply = <&ldo8_reg>;
+	extcon = <&fsa9480>;
 	status = "okay";
 };
 
