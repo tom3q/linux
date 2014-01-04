@@ -375,7 +375,7 @@
 
 		hsotg: otg@ed200000 {
 			compatible = "samsung,s3c6400-hsotg";
-			reg = <0xed200000 0x1000>;
+			reg = <0xed200000 0x20000>;
 			interrupt-parent = <&vic1>;
 			interrupts = <24>;
 			clock-names = "otg";
