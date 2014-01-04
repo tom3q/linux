@@ -2861,6 +2861,8 @@ static int s3c_hsotg_udc_start(struct usb_gadget *gadget,
 	hsotg->gadget.dev.of_node = hsotg->dev->of_node;
 	hsotg->gadget.speed = USB_SPEED_UNKNOWN;
 
+	clk_prepare_enable(hsotg->clk);
+
 	ret = regulator_bulk_enable(ARRAY_SIZE(hsotg->supplies),
 				    hsotg->supplies);
 	if (ret) {
@@ -2907,6 +2909,8 @@ static int s3c_hsotg_udc_stop(struct usb_gadget *gadget,
 	spin_unlock_irqrestore(&hsotg->lock, flags);
 
 	regulator_bulk_disable(ARRAY_SIZE(hsotg->supplies), hsotg->supplies);
+
+	clk_disable_unprepare(hsotg->clk);
 
 	return 0;
 }
@@ -3425,15 +3429,13 @@ static int s3c_hsotg_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
 	hsotg->regs = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(hsotg->regs)) {
-		ret = PTR_ERR(hsotg->regs);
-		goto err_clk;
-	}
+	if (IS_ERR(hsotg->regs))
+		return PTR_ERR(hsotg->regs);
 
 	ret = platform_get_irq(pdev, 0);
 	if (ret < 0) {
 		dev_err(dev, "cannot find IRQ\n");
-		goto err_clk;
+		return ret;
 	}
 
 	spin_lock_init(&hsotg->lock);
@@ -3554,6 +3556,8 @@ static int s3c_hsotg_probe(struct platform_device *pdev)
 
 	s3c_hsotg_dump(hsotg);
 
+	clk_disable_unprepare(hsotg->clk);
+
 	return 0;
 
 err_ep_mem:
@@ -3582,8 +3586,6 @@ static int s3c_hsotg_remove(struct platform_device *pdev)
 		/* should have been done already by driver model core */
 		usb_gadget_unregister_driver(hsotg->driver);
 	}
-
-	clk_disable_unprepare(hsotg->clk);
 
 	return 0;
 }
