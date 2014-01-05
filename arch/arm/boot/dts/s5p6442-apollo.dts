@@ -298,6 +298,14 @@
 		};
 	};
 
+	wm8994_reg: wm8994-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "WM8994_LDO";
+		gpio = <&gph1 5 0>;
+		enable-active-high;
+		vin-supply = <&vbat_reg>;
+	};
+
 	i2c_audio: i2c-7 {
 		compatible = "i2c-gpio";
 		gpios = /* SDA */ <&mp05 3 0>,
@@ -308,21 +316,21 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		audio-codec@1a {
+		wm8994: audio-codec@1a {
 			compatible = "wlf,wm8994";
 			reg = <0x1a>;
+			clock-names = "MCLK1";
+			clocks = <&clocks MOUT_CLKOUT>;
 			DBVDD-supply = <&buck3_reg>;
 			DCVDD-supply = <&buck3_reg>;
 			AVDD1-supply = <&buck3_reg>;
 			AVDD2-supply = <&buck3_reg>;
 			CPVDD-supply = <&buck3_reg>;
-			SPKVDD1-supply = <&vbat_reg>;
-			SPKVDD2-supply = <&vbat_reg>;
-			wlf,ldo1ena = <&gph1 5 0>;
-			wlf,ldo2ena = <&gph1 5 0>;
-			wlf,ldoena-always-driven;
+			SPKVDD1-supply = <&wm8994_reg>;
+			SPKVDD2-supply = <&wm8994_reg>;
 			gpio-controller;
 			#gpio-cells = <2>;
+			#sound-dai-cells = <1>;
 		};
 	};
 
@@ -386,6 +394,21 @@
 			gpios = <&gph3 7 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_MENU>;
 			debounce-interval = <20>;
+		};
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+
+		simple-audio-card,cpu {
+			sound-dai = <&i2s0>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&wm8994 0>;
+			bitclock-master;
+			frame-master;
 		};
 	};
 };
