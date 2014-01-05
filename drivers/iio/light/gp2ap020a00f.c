@@ -244,6 +244,7 @@ struct gp2ap020a00f_data {
 	struct mutex lock;
 	char *buffer;
 	struct regulator *vled_reg;
+	struct regulator *vcc_reg;
 	unsigned long flags;
 	enum gp2ap020a00f_opmode cur_opmode;
 	struct iio_trigger *trig;
@@ -1506,13 +1507,21 @@ static int gp2ap020a00f_probe(struct i2c_client *client,
 
 	data = iio_priv(indio_dev);
 
+	data->vcc_reg = devm_regulator_get(&client->dev, "vcc");
+	if (IS_ERR(data->vcc_reg))
+		return PTR_ERR(data->vcc_reg);
+
 	data->vled_reg = devm_regulator_get(&client->dev, "vled");
 	if (IS_ERR(data->vled_reg))
 		return PTR_ERR(data->vled_reg);
 
-	err = regulator_enable(data->vled_reg);
+	err = regulator_enable(data->vcc_reg);
 	if (err)
 		return err;
+
+	err = regulator_enable(data->vled_reg);
+	if (err)
+		goto error_regulator_disable_vcc;
 
 	regmap = devm_regmap_init_i2c(client, &gp2ap020a00f_regmap_config);
 	if (IS_ERR(regmap)) {
@@ -1598,6 +1607,8 @@ error_uninit_buffer:
 	iio_triggered_buffer_cleanup(indio_dev);
 error_regulator_disable:
 	regulator_disable(data->vled_reg);
+error_regulator_disable_vcc:
+	regulator_disable(data->vcc_reg);
 
 	return err;
 }
@@ -1618,6 +1629,7 @@ static int gp2ap020a00f_remove(struct i2c_client *client)
 	free_irq(client->irq, indio_dev);
 	iio_triggered_buffer_cleanup(indio_dev);
 	regulator_disable(data->vled_reg);
+	regulator_disable(data->vcc_reg);
 
 	return 0;
 }
