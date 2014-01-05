@@ -58,12 +58,16 @@
 #define CLK_GATE_IP4		0x0470
 #define CLK_GATE_BLOCK		0x0480
 #define CLK_GATE_IP5		0x0484
+#define CLK_OUT			0x0500
+#define MISC			0xe000
 #define OM_STAT			0xe100
 #define DAC_CONTROL		0xe810
 
 /* Helper macros to define clock arrays. */
 #define FIXED_RATE_CLOCKS(name)	\
 		static struct samsung_fixed_rate_clock name[]
+#define FIXED_FACTOR_CLOCKS(name)	\
+		static struct samsung_fixed_factor_clock name[]
 #define MUX_CLOCKS(name)	\
 		static struct samsung_mux_clock name[]
 #define DIV_CLOCKS(name)	\
@@ -342,6 +346,65 @@ PNAME(mout_audio1_6442_p) = {
 	"none"
 };
 
+PNAME(mout_clksel_p) = {
+	"fout_apll_clkout",
+	"fout_mpll_clkout",
+	"fout_epll",
+	"fout_vpll",
+	"sclk_usbphy0",
+	"sclk_usbphy1",
+	"sclk_hdmiphy",
+	"rtc",
+	"rtc_tick",
+	"dout_hclkm",
+	"dout_pclkm",
+	"dout_hclkd",
+	"dout_pclkd",
+	"dout_hclkp",
+	"dout_pclkp",
+	"dout_apll_clkout",
+	"dout_hpm",
+	"xxti",
+	"xusbxti",
+	"div_dclk"
+};
+
+PNAME(mout_clksel_6442_p) = {
+	"fout_apll_clkout",
+	"fout_mpll_clkout",
+	"fout_epll",
+	"fout_vpll",
+	"sclk_usbphy0",
+	"none",
+	"none",
+	"rtc",
+	"rtc_tick",
+	"none",
+	"none",
+	"dout_hclkd",
+	"dout_pclkd",
+	"dout_hclkp",
+	"dout_pclkp",
+	"dout_apll_clkout",
+	"none",
+	"fin_pll",
+	"none",
+	"div_dclk"
+};
+
+PNAME(mout_clkout_p) = {
+	"dout_clkout",
+	"none",
+	"xxti",
+	"xusbxti"
+};
+
+FIXED_FACTOR_CLOCKS(fixed_factor_clks) __initdata = {
+	FFACTOR(FOUT_APLL_CLKOUT, "fout_apll_clkout", "fout_apll", 1, 4, 0),
+	FFACTOR(FOUT_MPLL_CLKOUT, "fout_mpll_clkout", "fout_mpll", 1, 2, 0),
+	FFACTOR(DOUT_APLL_CLKOUT, "dout_apll_clkout", "dout_apll", 1, 4, 0),
+};
+
 MUX_CLOCKS(s5pv210_early_mux_clks) __initdata = {
 	MUX_F(FIN_PLL, "fin_pll", fin_pll_p, OM_STAT, 0, 1,
 					CLK_MUX_READ_ONLY, 0),
@@ -356,6 +419,8 @@ MUX_CLOCKS(mux_clks) __initdata = {
 	MUX(MOUT_EPLL, "mout_epll", mout_epll_p, CLK_SRC0, 8, 1),
 	MUX(MOUT_MPLL, "mout_mpll", mout_mpll_p, CLK_SRC0, 4, 1),
 	MUX(MOUT_APLL, "mout_apll", mout_apll_p, CLK_SRC0, 0, 1),
+
+	MUX(MOUT_CLKOUT, "mout_clkout", mout_clkout_p, MISC, 8, 2),
 };
 
 /* S5PC110/S5PV210-specific MUX clocks */
@@ -399,6 +464,8 @@ MUX_CLOCKS(s5pv210_mux_clks) __initdata = {
 	MUX(MOUT_AUDIO2, "mout_audio2", mout_audio2_p, CLK_SRC6, 8, 4),
 	MUX(MOUT_AUDIO1, "mout_audio1", mout_audio1_p, CLK_SRC6, 4, 4),
 	MUX(MOUT_AUDIO0, "mout_audio0", mout_audio0_p, CLK_SRC6, 0, 4),
+
+	MUX(MOUT_CLKSEL, "mout_clksel", mout_clksel_p, CLK_OUT, 12, 5),
 };
 
 /* S5P6442-specific MUX clocks */
@@ -429,6 +496,8 @@ MUX_CLOCKS(s5p6442_mux_clks) __initdata = {
 
 	MUX(MOUT_AUDIO1, "mout_audio1", mout_audio1_6442_p, CLK_SRC6, 4, 4),
 	MUX(MOUT_AUDIO0, "mout_audio0", mout_audio0_6442_p, CLK_SRC6, 0, 4),
+
+	MUX(MOUT_CLKSEL, "mout_clksel", mout_clksel_6442_p, CLK_OUT, 12, 5),
 };
 
 /* Fixed rate clocks generated outside the soc */
@@ -477,6 +546,8 @@ DIV_CLOCKS(div_clks) __initdata = {
 	DIV(DOUT_FLASH, "dout_flash", "mout_flash", CLK_DIV6, 12, 3),
 	DIV(DOUT_AUDIO1, "dout_audio1", "mout_audio1", CLK_DIV6, 4, 4),
 	DIV(DOUT_AUDIO0, "dout_audio0", "mout_audio0", CLK_DIV6, 0, 4),
+
+	DIV(DOUT_CLKOUT, "dout_clkout", "mout_clksel", CLK_OUT, 20, 4),
 };
 
 /* S5PC110/S5PC210-specific DIV clocks. */
@@ -831,6 +902,9 @@ static void __init __s5pv210_clk_init(struct device_node *np,
 	samsung_clk_register_mux(mux_clks, ARRAY_SIZE(mux_clks));
 	samsung_clk_register_div(div_clks, ARRAY_SIZE(div_clks));
 	samsung_clk_register_gate(gate_clks, ARRAY_SIZE(gate_clks));
+
+	samsung_clk_register_fixed_factor(fixed_factor_clks,
+						ARRAY_SIZE(fixed_factor_clks));
 
 	if (!is_s5p6442)
 		samsung_clk_register_alias(s5pv210_aliases,

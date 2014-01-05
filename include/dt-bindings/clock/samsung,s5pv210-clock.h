@@ -228,7 +228,15 @@
 #define ETM		199
 #define I2C1		200
 
+/* CLKOUT */
+#define FOUT_APLL_CLKOUT	201
+#define FOUT_MPLL_CLKOUT	202
+#define DOUT_APLL_CLKOUT	203
+#define MOUT_CLKSEL		204
+#define DOUT_CLKOUT		205
+#define MOUT_CLKOUT		206
+
 /* Total number of clocks. */
-#define NR_CLKS		201
+#define NR_CLKS		207
 
 #endif /* _DT_BINDINGS_CLOCK_SAMSUNG_S5PV210_CLOCK_H */
