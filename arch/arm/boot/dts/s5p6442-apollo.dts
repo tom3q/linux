@@ -54,6 +54,8 @@
 		gpios = /* SDA */ <&gpj4 0 0>,
 			/* SCL */ <&gpj4 3 0>;
 		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmic_musb_i2c_bus>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
@@ -232,6 +234,8 @@
 		gpios = /* SDA */ <&gpj0 5 0>,
 			/* SCL */ <&gpj0 4 0>;
 		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&fm_i2c_bus>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
@@ -250,6 +254,8 @@
 		gpios = /* SDA */ <&gpd1 2 0>,
 			/* SCL */ <&gpd1 3 0>;
 		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&mag_accel_i2c_bus>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
@@ -276,6 +282,8 @@
 		gpios = /* SDA */ <&gpj3 5 0>,
 			/* SCL */ <&gpj3 6 0>;
 		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&prox_i2c_bus>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
@@ -295,6 +303,8 @@
 		gpios = /* SDA */ <&mp05 3 0>,
 			/* SCL */ <&mp05 2 0>;
 		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_i2c_bus>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
@@ -398,6 +408,31 @@
 	gpio_keys: gpio-keys {
 		samsung,pins = "gph2-6", "gph3-0", "gph3-4", "gph3-5",
 				"gph3-6", "gph3-7";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	pmic_musb_i2c_bus: pmic-musb-i2c-bus {
+		samsung,pins = "gpj4-0", "gpj4-3";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	fm_i2c_bus: fm-musb-i2c-bus {
+		samsung,pins = "gpj0-4", "gpj0-5";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	mag_accel_i2c_bus: mag-accel-i2c-bus {
+		samsung,pins = "gpd1-2", "gpd1-3";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	prox_i2c_bus: prox-i2c-bus {
+		samsung,pins = "gpj3-3", "gpj3-6";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	audio_i2c_bus: audio-i2c-bus {
+		samsung,pins = "mp05-2", "mp05-3";
 		samsung,pin-pud = <PIN_PULL_NONE>;
 	};
 };
