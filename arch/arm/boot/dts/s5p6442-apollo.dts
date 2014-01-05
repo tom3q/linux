@@ -240,7 +240,7 @@
 		#size-cells = <0>;
 
 		fm-radio@10 {
-			compatible = "silabs,si4709";
+			compatible = "silabs,si470x";
 			reg = <0x10>;
 			interrupt-parent = <&gpj2>;
 			interrupts = <4 0>;
