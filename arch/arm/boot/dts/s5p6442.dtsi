@@ -144,6 +144,7 @@
 				clocks = <&clk_audss CLK_I2S>,
 						<&clk_audss CLK_I2S>,
 						<&clk_audss CLK_DOUT_AUD_BUS>;
+				samsung,idma-addr = <0xc0008000>;
 				pinctrl-names = "default";
 				pinctrl-0 = <&i2s1_bus>;
 				#sound-dai-cells = <0>;
