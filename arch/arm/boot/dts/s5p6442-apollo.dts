@@ -575,3 +575,8 @@
 &camera {
 	// TODO (camera interface)
 };
+
+&adc {
+	vdd-supply = <&ldo7_reg>;
+	status = "okay";
+};
