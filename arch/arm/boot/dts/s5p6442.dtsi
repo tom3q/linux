@@ -548,7 +548,7 @@
 		};
 
 		i2s1: i2s@f2200000 {
-			compatible = "samsung,s5pv210-i2s";
+			compatible = "samsung,s3c6410-i2s";
 			reg = <0xf2200000 0x100>;
 			interrupt-parent = <&vic2>;
 			interrupts = <17>;
