@@ -109,6 +109,14 @@ config LCD_HP700
 	  If you have an HP Jornada 700 series handheld (710/720/728)
 	  say Y to enable LCD control driver.
 
+config LCD_S6D04D1
+	tristate "S6D04D1 TFT LCD Driver"
+	depends on SPI && BACKLIGHT_CLASS_DEVICE
+	default n
+	help
+	  If you have an S6D04D1 LCD Panel, say Y to enable its
+	  LCD control driver.
+
 config LCD_S6E63M0
 	tristate "S6E63M0 AMOLED LCD Driver"
 	depends on SPI && BACKLIGHT_CLASS_DEVICE

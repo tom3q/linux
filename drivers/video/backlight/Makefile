@@ -13,6 +13,7 @@ obj-$(CONFIG_LCD_LMS283GF05)		+= lms283gf05.o
 obj-$(CONFIG_LCD_LMS501KF03)		+= lms501kf03.o
 obj-$(CONFIG_LCD_LTV350QV)		+= ltv350qv.o
 obj-$(CONFIG_LCD_PLATFORM)		+= platform_lcd.o
+obj-$(CONFIG_LCD_S6D04D1)		+= s6d04d1.o
 obj-$(CONFIG_LCD_S6E63M0)		+= s6e63m0.o
 obj-$(CONFIG_LCD_TDO24M)		+= tdo24m.o
 obj-$(CONFIG_LCD_TOSA)			+= tosa_lcd.o
