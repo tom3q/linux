@@ -441,7 +441,10 @@
 &onenand {
 	status = "okay";
 
-	// TODO: Partitions should be listed here
+	partition@1180000 {
+		label = "UBI";
+		reg = <0x1180000 0x1e380000>;
+	};
 };
 
 &i2s0 {
