@@ -78,8 +78,8 @@
 			interrupts = <7>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-			clocks = <&clocks NANDXL>;
-			clock-names = "gate";
+			clocks = <&clocks NANDXL>, <&clocks DOUT_FLASH>;
+			clock-names = "bus", "onenand";
 			status = "disabled";
 		};
 
