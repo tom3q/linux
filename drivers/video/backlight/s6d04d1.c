@@ -229,7 +229,7 @@ static const struct s6d04d1_panel *panels[] = {
 
 static int s6d04d1_power_is_on(int power)
 {
-	return power <= FB_BLANK_NORMAL;
+	return power == FB_BLANK_UNBLANK;
 }
 
 static int s6d04d1_detect_panel(struct s6d04d1 *lcd)
