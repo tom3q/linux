@@ -849,7 +849,7 @@ static struct samsung_pll_clock s5pv210_pll_clks[] __initdata = {
 };
 
 static struct samsung_pll_clock s5p6442_pll_clks[] __initdata = {
-	[apll] = PLL(pll_4508, FOUT_APLL, "fout_apll", "fin_pll",
+	[apll] = PLL(pll_4502, FOUT_APLL, "fout_apll", "fin_pll",
 						APLL_LOCK, APLL_CON0, NULL),
 	[mpll] = PLL(pll_4502, FOUT_MPLL, "fout_mpll", "fin_pll",
 						MPLL_LOCK, MPLL_CON, NULL),
