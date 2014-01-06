@@ -1060,8 +1060,8 @@ void __init s3c64xx_onenand1_set_platdata(struct onenand_platform_data *pdata)
 
 #ifdef CONFIG_S5P_DEV_ONENAND
 static struct resource s5p_onenand_resources[] = {
-	[0] = DEFINE_RES_MEM(S5P_PA_ONENAND, SZ_128K),
-	[1] = DEFINE_RES_MEM(S5P_PA_ONENAND_DMA, SZ_8K),
+	[0] = DEFINE_RES_MEM(S5P_PA_ONENAND_DMA, SZ_8K),
+	[1] = DEFINE_RES_MEM(S5P_PA_ONENAND, SZ_128K),
 	[2] = DEFINE_RES_IRQ(IRQ_ONENAND_AUDI),
 };
 
