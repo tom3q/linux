@@ -411,6 +411,27 @@
 			frame-master;
 		};
 	};
+
+	spi_lcd: spi-1 {
+		compatible = "spi-gpio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		gpio-sck = <&mp04 1 0>;
+		gpio-miso = <&mp04 2 0>;
+		gpio-mosi = <&mp04 3 0>;
+		cs-gpios = <&mp01 1 0>;
+		num-chipselects = <1>;
+
+		s6d04d1: display@0 {
+			compatible = "samsung,s6d04d1";
+			reg = <0>;
+			reset-gpios = <&mp05 5 1>;
+			vdd3-supply = <&ldo12_reg>;
+			vci-supply = <&ldo11_reg>;
+			spi-max-frequency = <1000000>;
+		};
+	};
 };
 
 &xusbxti {
