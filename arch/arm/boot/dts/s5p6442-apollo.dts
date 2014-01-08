@@ -532,12 +532,21 @@
 	status = "okay";
 
 	touchscreen@4a {
-		compatible = "atmel,qt602240_ts";
+		compatible = "atmel,maxtouch";
 		reg = <0x4a>;
 		interrupt-parent = <&gpg0>;
-		interrupts = <2>;
+		interrupts = <2 8>;
 		gpios = <&gpe1 4 0>;
-		// TODO
+		
+		atmel,x-line = <18>;
+		atmel,y-line = <11>;
+		atmel,x-size = <400>;
+		atmel,y-size = <240>;
+		atmel,burst-length = <0x11>;
+		atmel,threshold = <0x28>;
+		atmel,orientation = <1>;
+		
+		vdd-supply = <&ldo13_reg>;
 	};
 };
 
