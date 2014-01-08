@@ -1130,6 +1130,74 @@ static void mxt_input_close(struct input_dev *dev)
 	mxt_stop(data);
 }
 
+#ifdef CONFIG_OF
+static struct of_device_id mxt_dt_match[] = {
+	{ .compatible = "atmel,maxtouch" },
+	{}
+};
+MODULE_DEVICE_TABLE(of, mxt_dt_match);
+
+static struct mxt_platform_data *mxt_parse_dt(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	struct mxt_platform_data *pd;
+	u32 val;
+
+	pd = devm_kzalloc(dev, sizeof(*pd), GFP_KERNEL);
+	if (!pd) {
+		dev_err(dev, "Failed to allocate platform data\n");
+		return NULL;
+	}
+
+	if (of_property_read_u32(np, "atmel,x-line", &pd->x_line)) {
+		dev_err(dev, "failed to get atmel,x-line property\n");
+		return NULL;
+	}
+
+	if (of_property_read_u32(np, "atmel,y-line", &pd->y_line)) {
+		dev_err(dev, "failed to get atmel,y-line property\n");
+		return NULL;
+	}
+
+	if (of_property_read_u32(np, "atmel,x-size", &pd->x_size)) {
+		dev_err(dev, "failed to get atmel,x-size property\n");
+		return NULL;
+	}
+
+	if (of_property_read_u32(np, "atmel,y-size", &pd->y_size)) {
+		dev_err(dev, "failed to get atmel,y-size property\n");
+		return NULL;
+	}
+
+	if (of_property_read_u32(np, "atmel,burst-length", &pd->blen)) {
+		dev_err(dev, "failed to get atmel,burst-length property\n");
+		return NULL;
+	}
+
+	if (of_property_read_u32(np, "atmel,threshold", &pd->threshold)) {
+		dev_err(dev, "failed to get atmel,threshold property\n");
+		return NULL;
+	}
+
+	if (of_property_read_u32(np, "atmel,orientation", &val)) {
+		dev_err(dev, "failed to get atmel,orientation property\n");
+		return NULL;
+	}
+	if (val > MXT_DIAGONAL_COUNTER) {
+		dev_err(dev, "invalid value for atmel-orientation property\n");
+		return NULL;
+	}
+	pd->orient = val;
+
+	return pd;
+}
+#else
+static struct mxt_platform_data *mxt_parse_dt(struct device *dev)
+{
+	return NULL;
+}
+#endif
+
 static int mxt_probe(struct i2c_client *client,
 		const struct i2c_device_id *id)
 {
@@ -1138,6 +1206,9 @@ static int mxt_probe(struct i2c_client *client,
 	struct input_dev *input_dev;
 	int error;
 	unsigned int num_mt_slots;
+
+	if (!pdata && client->dev.of_node)
+		pdata = mxt_parse_dt(&client->dev);
 
 	if (!pdata)
 		return -EINVAL;
@@ -1343,6 +1414,7 @@ static struct i2c_driver mxt_driver = {
 		.name	= "atmel_mxt_ts",
 		.owner	= THIS_MODULE,
 		.pm	= &mxt_pm_ops,
+		.of_match_table = of_match_ptr(mxt_dt_match),
 	},
 	.probe		= mxt_probe,
 	.remove		= mxt_remove,

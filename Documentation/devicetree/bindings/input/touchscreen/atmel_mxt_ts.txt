@@ -1,0 +1,51 @@
+* Atmel maXtouch touchscreen controller
+
+Required properties:
+- compatible: must be "atmel,maxtouch"
+- reg: I2C address of the chip
+- interrupt-parent: interrupt controller which provides the interrupt
+- interrupts: interrupt signal to which the chip is connected
+- atmel,x-line: horizonal line
+- atmel,y-line: vertical line
+- atmel,x-size: horizontal resolution of touchscreen
+- atmel,y-size: vertical resolution of touchscreen
+- atmel,burst-length: burst length
+- atmel,threshold: threshold
+- atmel,orientation: touchscreen orientation, must be one of following:
+    - 0: normal
+    - 1: diagonal
+    - 2: horizonally flipped
+    - 3: rotated by 90 degrees counter-clockwise
+    - 4: vertically flipped
+    - 5: rotated by 90 degress clockwise
+    - 6: rotated by 180 degrees
+    - 7: diagonal counter
+
+Optional properties:
+- vdd-supply: voltage regulator used for power control and reading
+  operating voltage
+
+Example:
+
+	i2c@00000000 {
+		/* ... */
+
+		tsp@4a {
+			compatible = "atmel,maxtouch";
+			reg = <0x4a>;
+			interrupt-parent = <&gpe1>;
+			interrupts = <7 2>;
+
+			atmel,x-line = <19>;
+			atmel,y-line = <11>;
+			atmel,x-size = <800>;
+			atmel,y-size = <480>;
+			atmel,burst-length = <0x11>;
+			atmel,threshold = <0x28>;
+			atmel,orientation = <1>;
+
+			vdd-supply = <&tsp_reg>;
+		};
+
+		/* ... */
+	};
