@@ -19,6 +19,7 @@
 #include <linux/i2c/atmel_mxt_ts.h>
 #include <linux/input/mt.h>
 #include <linux/interrupt.h>
+#include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 
 /* Version */
@@ -247,6 +248,7 @@ struct mxt_message {
 struct mxt_data {
 	struct i2c_client *client;
 	struct input_dev *input_dev;
+	struct regulator *regulator;
 	char phys[64];		/* device physical location */
 	const struct mxt_platform_data *pdata;
 	struct mxt_object *object_table;
@@ -720,13 +722,14 @@ static void mxt_handle_pdata(struct mxt_data *data)
 			MXT_TOUCH_YRANGE_MSB, (pdata->y_size - 1) >> 8);
 
 	/* Set touchscreen voltage */
-	if (pdata->voltage) {
-		if (pdata->voltage < MXT_VOLTAGE_DEFAULT) {
-			voltage = (MXT_VOLTAGE_DEFAULT - pdata->voltage) /
+	if (!IS_ERR(data->regulator)) {
+		int reg_voltage = regulator_get_voltage(data->regulator);
+		if (reg_voltage < MXT_VOLTAGE_DEFAULT) {
+			voltage = (MXT_VOLTAGE_DEFAULT - reg_voltage) /
 				MXT_VOLTAGE_STEP;
 			voltage = 0xff - voltage + 1;
 		} else
-			voltage = (pdata->voltage - MXT_VOLTAGE_DEFAULT) /
+			voltage = (reg_voltage - MXT_VOLTAGE_DEFAULT) /
 				MXT_VOLTAGE_STEP;
 
 		mxt_write_object(data, MXT_SPT_CTECONFIG_T28,
@@ -1151,6 +1154,13 @@ static int mxt_probe(struct i2c_client *client,
 
 	input_dev->name = (data->is_tp) ? "Atmel maXTouch Touchpad" :
 					  "Atmel maXTouch Touchscreen";
+
+	data->regulator = devm_regulator_get(&client->dev, "vdd");
+	if (!IS_ERR(data->regulator)) {
+		regulator_enable(data->regulator);
+		msleep(100);
+	}
+
 	snprintf(data->phys, sizeof(data->phys), "i2c-%u-%04x/input0",
 		 client->adapter->nr, client->addr);
 
@@ -1170,7 +1180,7 @@ static int mxt_probe(struct i2c_client *client,
 
 	error = mxt_initialize(data);
 	if (error)
-		goto err_free_mem;
+		goto err_disable_regulator;
 
 	__set_bit(EV_ABS, input_dev->evbit);
 	__set_bit(EV_KEY, input_dev->evbit);
@@ -1253,6 +1263,9 @@ err_free_irq:
 	free_irq(client->irq, data);
 err_free_object:
 	kfree(data->object_table);
+err_disable_regulator:
+	if (!IS_ERR(data->regulator))
+		regulator_disable(data->regulator);
 err_free_mem:
 	input_free_device(input_dev);
 	kfree(data);
@@ -1267,6 +1280,8 @@ static int mxt_remove(struct i2c_client *client)
 	free_irq(data->irq, data);
 	input_unregister_device(data->input_dev);
 	kfree(data->object_table);
+	if (!IS_ERR(data->regulator))
+		regulator_disable(data->regulator);
 	kfree(data);
 
 	return 0;

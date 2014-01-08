@@ -39,7 +39,6 @@ struct mxt_platform_data {
 	unsigned int y_size;
 	unsigned int blen;
 	unsigned int threshold;
-	unsigned int voltage;
 	unsigned char orient;
 	unsigned long irqflags;
 	bool is_tp;

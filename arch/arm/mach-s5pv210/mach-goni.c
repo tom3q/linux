@@ -238,6 +238,32 @@ static void __init goni_radio_init(void)
 }
 
 /* TSP */
+static struct regulator_consumer_supply tsp_fixed_consumer =
+	REGULATOR_SUPPLY("vdd", "2-004a");
+
+static struct regulator_init_data tsp_fixed_voltage_init_data = {
+	.constraints		= {
+		.name		= "TSP_2.8V",
+	},
+	.num_consumer_supplies	= 1,
+	.consumer_supplies	= &tsp_fixed_consumer,
+};
+
+static struct fixed_voltage_config tsp_fixed_voltage_config = {
+	.supply_name		= "TSP_VDD",
+	.microvolts		= 2800000,
+	.gpio			= -EINVAL,
+	.init_data		= &tsp_fixed_voltage_init_data,
+};
+
+static struct platform_device tsp_fixed_voltage = {
+	.name			= "reg-fixed-voltage",
+	.id			= 3,
+	.dev			= {
+		.platform_data	= &tsp_fixed_voltage_config,
+	},
+};
+
 static struct mxt_platform_data qt602240_platform_data = {
 	.x_line		= 17,
 	.y_line		= 11,
@@ -245,7 +271,6 @@ static struct mxt_platform_data qt602240_platform_data = {
 	.y_size		= 480,
 	.blen		= 0x21,
 	.threshold	= 0x28,
-	.voltage	= 2800000,              /* 2.8V */
 	.orient		= MXT_DIAGONAL,
 	.irqflags	= IRQF_TRIGGER_FALLING,
 };
@@ -885,6 +910,7 @@ static struct platform_device *goni_devices[] __initdata = {
 	&s3c_device_usb_hsotg,
 	&samsung_device_keypad,
 	&s3c_device_i2c1,
+	&tsp_fixed_voltage,
 	&s3c_device_i2c2,
 	&wm8994_fixed_voltage0,
 	&wm8994_fixed_voltage1,
