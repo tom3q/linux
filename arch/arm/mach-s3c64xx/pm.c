@@ -17,7 +17,11 @@
 #include <linux/serial_core.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
+#include <linux/of.h>
 #include <linux/pm_domain.h>
+#include <linux/slab.h>
+
+#include <dt-bindings/arm/s3c64xx-power-domains.h>
 
 #include <mach/map.h>
 #include <mach/irqs.h>
@@ -165,16 +169,62 @@ static struct s3c64xx_pm_domain s3c64xx_pm_v = {
 	},
 };
 
-static struct s3c64xx_pm_domain *s3c64xx_pm_domains[] = {
-	&s3c64xx_pm_irom,
-	&s3c64xx_pm_etm,
-	&s3c64xx_pm_g,
-	&s3c64xx_pm_v,
-	&s3c64xx_pm_i,
-	&s3c64xx_pm_p,
-	&s3c64xx_pm_s,
-	&s3c64xx_pm_f,
+static struct s3c64xx_pm_domain *s3c64xx_pm_domains[NR_DOMAINS] = {
+	[DOMAIN_V] = &s3c64xx_pm_v,
+	[DOMAIN_G] = &s3c64xx_pm_g,
+	[DOMAIN_I] = &s3c64xx_pm_i,
+	[DOMAIN_P] = &s3c64xx_pm_p,
+	[DOMAIN_F] = &s3c64xx_pm_f,
+	[DOMAIN_S] = &s3c64xx_pm_s,
+	[DOMAIN_ETM] = &s3c64xx_pm_etm,
+	[DOMAIN_IROM] = &s3c64xx_pm_irom,
 };
+
+#ifdef CONFIG_OF
+static struct of_device_id s3c64xx_pd_matches[] = {
+	{ .compatible = "samsung,s3c6400-clock", },
+	{ .compatible = "samsung,s3c6410-clock", },
+	{ },
+};
+
+static struct genpd_onecell_data pd_data;
+
+static int s3c64xx_pm_parse_domains(void)
+{
+	struct device_node *np;
+	int i;
+
+	np = of_find_matching_node(NULL, s3c64xx_pd_matches);
+	if (!np)
+		return -ENODEV;
+
+	pd_data.domains = kcalloc(ARRAY_SIZE(s3c64xx_pm_domains),
+				  sizeof(*pd_data.domains), GFP_KERNEL);
+	if (!pd_data.domains)
+		return -ENOMEM;
+
+	for (i = 0; i < ARRAY_SIZE(s3c64xx_pm_domains); ++i) {
+		struct s3c64xx_pm_domain *pd = s3c64xx_pm_domains[i];
+		struct dev_power_governor *gov = NULL;
+		int on;
+
+		on = __raw_readl(S3C64XX_NORMAL_CFG) & pd->ena;
+
+		if (pd->always_on)
+			gov = &pm_domain_always_on_gov;
+
+		pm_genpd_init(&pd->pd, gov, !on);
+		pd_data.domains[i] = &pd->pd;
+
+		pr_debug("%s: registered domain %s\n", __func__, pd->pd.name);
+	}
+
+	pd_data.domain_num = ARRAY_SIZE(s3c64xx_pm_domains);
+	of_genpd_add_provider(np, of_genpd_xlate_onecell, &pd_data);
+
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_S3C_PM_DEBUG_LED_SMDK
 void s3c_pm_debug_smdkled(u32 set, u32 clear)
@@ -312,6 +362,10 @@ int __init s3c64xx_pm_init(void)
 
 	s3c_pm_init();
 
+#ifdef CONFIG_OF
+	if (of_have_populated_dt())
+		return s3c64xx_pm_parse_domains();
+#endif
 
 	for (i = 0; i < ARRAY_SIZE(s3c64xx_pm_domains); i++) {
 		struct s3c64xx_pm_domain *pd = s3c64xx_pm_domains[i];
