@@ -326,11 +326,19 @@ struct g3d_req_shader_data {
 	__u32 data[];
 };
 
+struct drm_exynos_g3d_pipe {
+	__u32 pipe;
+	__u32 flags;
+	__u32 reserved[2];
+};
+
 struct drm_exynos_g3d_submit {
+	__u32 pipe;
 	__u32 handle;
 	__u32 offset;
 	__u32 length;
 	__u32 fence;
+	__u32 reserved[3];
 };
 
 /* timeouts are specified in clock-monotonic absolute times (to simplify
@@ -343,9 +351,10 @@ struct drm_exynos_timespec {
 };
 
 struct drm_exynos_g3d_wait {
+	__u32 pipe;
 	__u32 fence;
-	__u32 pad;
 	struct drm_exynos_timespec timeout;
+	__u32 reserved[2];
 };
 
 enum drm_exynos_ops_id {
@@ -532,8 +541,10 @@ struct drm_exynos_ipp_cmd_ctrl {
 #define DRM_EXYNOS_IPP_QUEUE_BUF	0x32
 #define DRM_EXYNOS_IPP_CMD_CTRL	0x33
 
-#define DRM_EXYNOS_G3D_SUBMIT		0x40
-#define DRM_EXYNOS_G3D_WAIT		0x41
+#define DRM_EXYNOS_G3D_CREATE_PIPE	0x50
+#define DRM_EXYNOS_G3D_DESTROY_PIPE	0x51
+#define DRM_EXYNOS_G3D_SUBMIT		0x52
+#define DRM_EXYNOS_G3D_WAIT		0x53
 
 #define DRM_IOCTL_EXYNOS_GEM_CREATE		DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_GEM_CREATE, struct drm_exynos_gem_create)
@@ -570,6 +581,10 @@ struct drm_exynos_ipp_cmd_ctrl {
 		DRM_EXYNOS_G3D_SUBMIT, struct drm_exynos_g3d_submit)
 #define DRM_IOCTL_EXYNOS_G3D_WAIT		DRM_IOW(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_G3D_WAIT, struct drm_exynos_g3d_wait)
+#define DRM_IOCTL_EXYNOS_G3D_CREATE_PIPE	DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_CREATE_PIPE, struct drm_exynos_g3d_pipe)
+#define DRM_IOCTL_EXYNOS_G3D_DESTROY_PIPE	DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_G3D_DESTROY_PIPE, struct drm_exynos_g3d_pipe)
 
 /* EXYNOS specific events */
 #define DRM_EXYNOS_G2D_EVENT		0x80000000

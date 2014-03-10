@@ -25,6 +25,7 @@
 #include <linux/freezer.h>
 #include <linux/fs.h>
 #include <linux/anon_inodes.h>
+#include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
@@ -37,6 +38,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/poll.h>
+#include <linux/rwsem.h>
 #include <linux/sched.h>
 #include <linux/semaphore.h>
 #include <linux/slab.h>
@@ -52,7 +54,6 @@
  */
 #define G3D_AUTOSUSPEND_DELAY		100
 #define G3D_FLUSH_TIMEOUT		1000
-#define G3D_MAX_REQUESTS		128
 #define G3D_NUM_SHADER_INSTR		512
 #define G3D_NUM_CONST_FLOAT		1024
 #define G3D_NUM_CONST_INT		16
@@ -145,6 +146,7 @@ enum g3d_flush_level {
 	G3D_FLUSH_COLOR_CACHE = 18,
 };
 
+/* Common driver data */
 struct g3d_drvdata {
 	struct exynos_drm_subdrv subdrv;
 	void __iomem *base;
@@ -161,8 +163,6 @@ struct g3d_drvdata {
 
 	struct g3d_context *last_ctx;
 
-	struct semaphore request_sem;
-
 	unsigned long state;
 	unsigned int tex_timestamp;
 	unsigned int fb_timestamp;
@@ -178,6 +178,14 @@ struct g3d_validation_data {
 	struct g3d_request *shader_program[G3D_NUM_SHADERS];
 };
 
+/* Per-file private data */
+struct g3d_priv {
+	struct g3d_drvdata *g3d;
+	struct idr pipes_idr;
+	struct rw_semaphore pipes_idr_sem;
+};
+
+/* Per-pipe context data */
 struct g3d_context {
 	struct g3d_drvdata *g3d;
 	struct drm_device *drm_dev;
@@ -191,6 +199,7 @@ struct g3d_context {
 	struct list_head state_update_list;
 	struct list_head state_restore_list;
 
+	struct mutex submit_mutex;
 	struct list_head request_list;
 
 	uint32_t registers[G3D_NUM_REGISTERS];
@@ -793,7 +802,6 @@ static void g3d_request_release(struct kref *kref)
 		g3d_requests[REQ_TYPE(&req->header)].free(g3d, req);
 
 	kfree(req);
-	up(&g3d->request_sem);
 }
 
 static inline void g3d_request_put(struct g3d_request *req)
@@ -1012,6 +1020,9 @@ static int g3d_handle_draw_buffer(struct g3d_drvdata *g3d,
 static int g3d_handle_fence(struct g3d_drvdata *g3d, struct g3d_request *req)
 {
 	struct g3d_context *ctx = req->ctx;
+
+	g3d_flush_pipeline(g3d, G3D_FLUSH_COLOR_CACHE, false);
+	g3d_flush_caches(g3d);
 
 	++ctx->completed_fence;
 	wake_up_interruptible_all(&ctx->fence_wq);
@@ -1286,7 +1297,7 @@ static int g3d_process_shader_data(struct g3d_drvdata *g3d,
 	struct g3d_shader_program *sp;
 	uint32_t count = (req_length(req) - sizeof(*rsd)) / 4;
 
-	sp = req_data(ctx->validation.shader_program[RSD_UNIT(rsd)]);
+	sp = req_data(ctx->shader_program[RSD_UNIT(rsd)]);
 
 	memcpy(sp->data + sp->type_offset[RSD_TYPE(rsd)] + RSD_OFFSET(rsd),
 		rsd->data, count * 4);
@@ -1978,15 +1989,10 @@ static struct g3d_request *g3d_allocate_request(struct g3d_drvdata *g3d,
 		}
 	}
 
-	ret = down_interruptible(&g3d->request_sem);
-	if (ret)
-		return ERR_PTR(ret);
-
 	req = kmalloc(sizeof(*req) + info->priv_length + length, GFP_KERNEL);
 	if (!req) {
 		dev_err(g3d->dev, "failed to allocate g3d request\n");
-		ret = -ENOMEM;
-		goto err_up;
+		return -ENOMEM;
 	}
 	kref_init(&req->kref);
 	req->ctx = ctx;
@@ -2008,8 +2014,6 @@ static struct g3d_request *g3d_allocate_request(struct g3d_drvdata *g3d,
 
 err_free:
 	kfree(req);
-err_up:
-	up(&g3d->request_sem);
 
 	return ERR_PTR(ret);
 }
@@ -2037,16 +2041,31 @@ static void g3d_post_requests(struct g3d_drvdata *g3d, struct g3d_context *ctx,
 	spin_unlock(&g3d->ready_lock);
 }
 
+static struct g3d_context *g3d_get_context(struct g3d_priv *priv, int id)
+{
+	struct g3d_drvdata *g3d = priv->g3d;
+	struct g3d_context *ctx;
+
+	ctx = idr_find(&priv->pipes_idr, id);
+	if (!ctx) {
+		dev_err(g3d->dev, "invalid pipe ID %u\n", id);
+		ctx = ERR_PTR(-ENOENT);
+	}
+
+	return ctx;
+}
+
 int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 		       struct drm_file *file)
 {
 	struct drm_exynos_file_private *file_priv = file->driver_priv;
-	struct g3d_context *ctx = file_priv->g3d_priv;
+	struct g3d_priv *priv = file_priv->g3d_priv;
 	struct drm_exynos_g3d_submit *submit = data;
 	struct g3d_validation_data validation_copy;
-	struct g3d_drvdata *g3d = ctx->g3d;
+	struct g3d_drvdata *g3d = priv->g3d;
 	struct exynos_drm_gem_obj *gem;
 	struct g3d_request *req, *n;
+	struct g3d_context *ctx;
 	LIST_HEAD(submit_list);
 	const uint32_t *sdata;
 	uint32_t length;
@@ -2059,10 +2078,20 @@ int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 			__func__, submit->handle, submit->offset,
 			submit->length);
 
+	down_read(&priv->pipes_idr_sem);
+
+	ctx = g3d_get_context(priv, submit->pipe);
+	if (IS_ERR(ctx)) {
+		ret = PTR_ERR(ctx);
+		goto err_unlock_idr;
+	}
+
+	mutex_lock(&ctx->submit_mutex);
+
 	gem = exynos_drm_gem_lookup(dev, file, submit->handle);
 	if (!gem) {
 		dev_err(g3d->dev, "failed to lookup submit buffer\n");
-		return -EINVAL;
+		goto err_unlock_ctx;
 	}
 
 	if (unlikely(!gem->buffer->kvaddr)) {
@@ -2133,6 +2162,9 @@ int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 
 	submit->fence = fence;
 
+	mutex_unlock(&ctx->submit_mutex);
+	up_read(&priv->pipes_idr_sem);
+
 	return 0;
 
 err_free:
@@ -2141,6 +2173,10 @@ err_free:
 	memcpy(&ctx->validation, &validation_copy, sizeof(validation_copy));
 err_gem_unref:
 	drm_gem_object_unreference_unlocked(&gem->base);
+err_unlock_ctx:
+	mutex_unlock(&ctx->submit_mutex);
+err_unlock_idr:
+	up_read(&priv->pipes_idr_sem);
 
 	return ret;
 }
@@ -2199,29 +2235,48 @@ static int g3d_wait_interruptible(struct g3d_context *ctx, uint32_t fence,
 int s3c6410_g3d_wait(struct drm_device *dev, void *data, struct drm_file *file)
 {
 	struct drm_exynos_file_private *file_priv = file->driver_priv;
-	struct g3d_context *ctx = file_priv->g3d_priv;
+	struct g3d_priv *priv = file_priv->g3d_priv;
 	struct drm_exynos_g3d_wait *wait = data;
+	struct g3d_context *ctx;
 	struct timespec ts;
+	int ret;
+
+	down_read(&priv->pipes_idr_sem);
+
+	ctx = g3d_get_context(priv, wait->pipe);
+	if (IS_ERR(ctx)) {
+		ret = PTR_ERR(ctx);
+		goto unlock;
+	}
 
 	ts.tv_sec = wait->timeout.tv_sec;
 	ts.tv_nsec = wait->timeout.tv_nsec;
 
-	return g3d_wait_interruptible(ctx, wait->fence, &ts);
+	ret = g3d_wait_interruptible(ctx, wait->fence, &ts);
+
+unlock:
+	up_read(&priv->pipes_idr_sem);
+
+	return ret;
 }
 
-/*
- * DRM subdriver
- */
-static int g3d_open(struct drm_device *drm_dev, struct device *dev,
-		    struct drm_file *file)
+int s3c6410_g3d_create_pipe(struct drm_device *drm_dev, void *data,
+			    struct drm_file *file)
 {
 	struct drm_exynos_file_private *file_priv = file->driver_priv;
-	struct g3d_drvdata *g3d = dev_get_drvdata(dev);
+	struct g3d_priv *priv = file_priv->g3d_priv;
+	struct drm_exynos_g3d_pipe *pipe = data;
+	struct g3d_drvdata *g3d = priv->g3d;
 	struct g3d_context *ctx;
+	int ret;
+
+	down_write(&priv->pipes_idr_sem);
 
 	ctx = kzalloc(sizeof(struct g3d_context), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	if (!ctx) {
+		ret = -ENOMEM;
+		goto err_unlock;
+	}
 
 	ctx->drm_dev = drm_dev;
 	ctx->g3d = g3d;
@@ -2232,23 +2287,33 @@ static int g3d_open(struct drm_device *drm_dev, struct device *dev,
 	INIT_LIST_HEAD(&ctx->state_update_list);
 	INIT_LIST_HEAD(&ctx->state_restore_list);
 	INIT_LIST_HEAD(&ctx->request_list);
+	mutex_init(&ctx->submit_mutex);
 
 	memcpy(ctx->register_masks, g3d_register_masks_def,
 						sizeof(ctx->register_masks));
 
-	/* Set private data */
-	file_priv->g3d_priv = ctx;
+	ret = idr_alloc(&priv->pipes_idr, ctx, 0, 0, GFP_KERNEL);
+	if (ret < 0) {
+		dev_err(g3d->dev, "failed to allocate pipe ID (%d)\n", ret);
+		goto err_free;
+	}
 
-	dev_dbg_fops(dev, "device opened\n");
+	pipe->pipe = ret;
+
+	up_write(&priv->pipes_idr_sem);
 
 	return 0;
+
+err_free:
+	kfree(ctx);
+err_unlock:
+	up_write(&priv->pipes_idr_sem);
+
+	return ret;
 }
 
-static void g3d_close(struct drm_device *drm_dev, struct device *dev,
-		      struct drm_file *file)
+static void g3d_destroy_context(struct g3d_context *ctx)
 {
-	struct drm_exynos_file_private *file_priv = file->driver_priv;
-	struct g3d_context *ctx = file_priv->g3d_priv;
 	struct g3d_drvdata *g3d = ctx->g3d;
 	struct g3d_request *req, *n;
 
@@ -2284,6 +2349,74 @@ static void g3d_close(struct drm_device *drm_dev, struct device *dev,
 		g3d_request_put(ctx->colorbuffer);
 
 	kfree(ctx);
+}
+
+int s3c6410_g3d_destroy_pipe(struct drm_device *drm_dev, void *data,
+			     struct drm_file *file)
+{
+	struct drm_exynos_file_private *file_priv = file->driver_priv;
+	struct g3d_priv *priv = file_priv->g3d_priv;
+	struct drm_exynos_g3d_pipe *pipe = data;
+	struct g3d_context *ctx;
+
+	down_write(&priv->pipes_idr_sem);
+
+	ctx = g3d_get_context(priv, pipe->pipe);
+	if (!IS_ERR(ctx)) {
+		idr_remove(&priv->pipes_idr, pipe->pipe);
+		g3d_destroy_context(ctx);
+	}
+
+	up_write(&priv->pipes_idr_sem);
+
+	return 0;
+}
+
+/*
+ * DRM subdriver
+ */
+static int g3d_open(struct drm_device *drm_dev, struct device *dev,
+		    struct drm_file *file)
+{
+	struct drm_exynos_file_private *file_priv = file->driver_priv;
+	struct g3d_drvdata *g3d = dev_get_drvdata(dev);
+	struct g3d_priv *priv;
+
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	idr_init(&priv->pipes_idr);
+	priv->g3d = g3d;
+	init_rwsem(&priv->pipes_idr_sem);
+
+	/* Set private data */
+	file_priv->g3d_priv = priv;
+
+	dev_dbg_fops(dev, "device opened\n");
+
+	return 0;
+}
+
+static int g3d_pipes_idr_cleanup(int id, void *p, void *data)
+{
+	struct g3d_context *ctx = p;
+
+	g3d_destroy_context(ctx);
+
+	return 0;
+}
+
+static void g3d_close(struct drm_device *drm_dev, struct device *dev,
+		      struct drm_file *file)
+{
+	struct drm_exynos_file_private *file_priv = file->driver_priv;
+	struct g3d_priv *priv = file_priv->g3d_priv;
+	struct g3d_drvdata *g3d = priv->g3d;
+
+	idr_for_each(&priv->pipes_idr, g3d_pipes_idr_cleanup, NULL);
+	idr_destroy(&priv->pipes_idr);
+	kfree(priv);
 
 	dev_dbg_fops(g3d->dev, "device released\n");
 }
@@ -2337,7 +2470,6 @@ static int g3d_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&g3d->ready_list);
 	init_waitqueue_head(&g3d->ready_wq);
 	mutex_init(&g3d->stall_mutex);
-	sema_init(&g3d->request_sem, G3D_MAX_REQUESTS);
 
 	platform_set_drvdata(pdev, g3d);
 
