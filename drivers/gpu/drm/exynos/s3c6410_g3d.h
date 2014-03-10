@@ -17,9 +17,13 @@
 #ifndef __OPENFIMG_G3D_H_
 #define __OPENFIMG_G3D_H_
 
-extern int s3c6410_g3d_submit(struct drm_device *dev, void *data,
-				    struct drm_file *file_priv);
-extern int s3c6410_g3d_wait(struct drm_device *dev, void *data,
-					struct drm_file *file_priv);
+int s3c6410_g3d_create_pipe(struct drm_device *drm_dev, void *data,
+			    struct drm_file *file);
+int s3c6410_g3d_destroy_pipe(struct drm_device *drm_dev, void *data,
+			     struct drm_file *file);
+int s3c6410_g3d_submit(struct drm_device *dev, void *data,
+		       struct drm_file *file_priv);
+int s3c6410_g3d_wait(struct drm_device *dev, void *data,
+		     struct drm_file *file_priv);
 
 #endif
