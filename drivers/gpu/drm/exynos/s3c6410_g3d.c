@@ -161,6 +161,11 @@ struct g3d_drvdata {
 	struct list_head ready_list;
 	wait_queue_head_t ready_wq;
 
+	atomic_t next_fence;
+	uint32_t submitted_fence;
+	uint32_t completed_fence;
+	wait_queue_head_t fence_wq;
+
 	struct g3d_context *last_ctx;
 
 	unsigned long state;
@@ -191,10 +196,6 @@ struct g3d_context {
 	struct drm_device *drm_dev;
 	struct drm_file *file;
 	struct list_head list;
-
-	uint32_t submitted_fence;
-	uint32_t completed_fence;
-	wait_queue_head_t fence_wq;
 
 	struct list_head state_update_list;
 	struct list_head state_restore_list;
@@ -1019,13 +1020,15 @@ static int g3d_handle_draw_buffer(struct g3d_drvdata *g3d,
 /* Fence request */
 static int g3d_handle_fence(struct g3d_drvdata *g3d, struct g3d_request *req)
 {
-	struct g3d_context *ctx = req->ctx;
+	uint32_t *timestamp = (uint32_t *)req->data;
 
 	g3d_flush_pipeline(g3d, G3D_FLUSH_COLOR_CACHE, false);
 	g3d_flush_caches(g3d);
 
-	++ctx->completed_fence;
-	wake_up_interruptible_all(&ctx->fence_wq);
+	if (*timestamp > g3d->completed_fence)
+		g3d->completed_fence = *timestamp;
+
+	wake_up_interruptible_all(&g3d->fence_wq);
 
 	g3d_request_put(req);
 
@@ -1778,7 +1781,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.validate = g3d_validate_draw_buffer,
 		.free = g3d_free_draw_buffer,
 		.handle = g3d_handle_draw_buffer,
-		.flags = G3D_REQUEST_MARK_PREEMPTION |
+		.flags = G3D_REQUEST_PREEMPTION_POINT |
 				G3D_REQUEST_UPDATE_STATE |
 				G3D_REQUEST_STRICT_SIZE_CHECK,
 		.length = sizeof(struct g3d_req_draw_buffer),
@@ -1786,7 +1789,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 	},
 	[G3D_REQUEST_FENCE] = {
 		.handle = g3d_handle_fence,
-		.flags = G3D_REQUEST_PREEMPTION_POINT |
+		.flags = G3D_REQUEST_MARK_PREEMPTION |
 				G3D_REQUEST_STRICT_SIZE_CHECK,
 	},
 };
@@ -1839,6 +1842,9 @@ static struct g3d_request *g3d_get_next_request(struct g3d_drvdata *g3d)
 		ctx = list_first_entry(&g3d->ready_list,
 						struct g3d_context, list);
 
+		dev_dbg_events(g3d->dev, "preempted ctx %p to ctx %p",
+				req->ctx, ctx);
+
 		req = list_first_entry(&ctx->request_list,
 						struct g3d_request, list);
 		req_info = &g3d_requests[REQ_TYPE(&req->header)];
@@ -1849,8 +1855,10 @@ static struct g3d_request *g3d_get_next_request(struct g3d_drvdata *g3d)
 	if (list_empty(&ctx->request_list))
 		list_del_init(&ctx->list);
 
-	if (req_info->flags & G3D_REQUEST_MARK_PREEMPTION)
+	if (req_info->flags & G3D_REQUEST_MARK_PREEMPTION) {
 		set_bit(G3D_STATE_PREEMPTED, &g3d->state);
+		dev_dbg_events(g3d->dev, "ctx %p marked preemption\n", ctx);
+	}
 
 	return req;
 }
@@ -1938,18 +1946,21 @@ static struct g3d_request *g3d_allocate_fence(struct g3d_drvdata *g3d,
 					      uint32_t *fence)
 {
 	struct g3d_request *req;
+	uint32_t *timestamp;
 
-	req = kmalloc(sizeof(*req), GFP_KERNEL);
+	req = kmalloc(sizeof(*req) + sizeof(*timestamp), GFP_KERNEL);
 	if (!req) {
 		dev_err(g3d->dev, "failed to allocate g3d request\n");
 		return ERR_PTR(-ENOMEM);
 	}
+	timestamp = (uint32_t *)req->data;
 
 	kref_init(&req->kref);
 	req->ctx = ctx;
-	req->header = REQ_HDR(G3D_REQUEST_FENCE, 0);
+	req->header = REQ_HDR(G3D_REQUEST_FENCE, sizeof(*timestamp));
+	*timestamp = atomic_inc_return(&g3d->next_fence);
 
-	*fence = ++ctx->submitted_fence;
+	*fence = *timestamp;
 
 	return req;
 }
@@ -1992,7 +2003,7 @@ static struct g3d_request *g3d_allocate_request(struct g3d_drvdata *g3d,
 	req = kmalloc(sizeof(*req) + info->priv_length + length, GFP_KERNEL);
 	if (!req) {
 		dev_err(g3d->dev, "failed to allocate g3d request\n");
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 	}
 	kref_init(&req->kref);
 	req->ctx = ctx;
@@ -2019,7 +2030,7 @@ err_free:
 }
 
 static void g3d_post_requests(struct g3d_drvdata *g3d, struct g3d_context *ctx,
-			      struct list_head *list)
+			      struct list_head *list, uint32_t fence)
 {
 	bool wake;
 
@@ -2037,6 +2048,8 @@ static void g3d_post_requests(struct g3d_drvdata *g3d, struct g3d_context *ctx,
 			__func__, __LINE__);
 		wake_up_interruptible_sync(&g3d->ready_wq);
 	}
+
+	g3d->submitted_fence = fence;
 
 	spin_unlock(&g3d->ready_lock);
 }
@@ -2157,7 +2170,7 @@ int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 	}
 	list_add_tail(&req->list, &submit_list);
 
-	g3d_post_requests(g3d, ctx, &submit_list);
+	g3d_post_requests(g3d, ctx, &submit_list, fence);
 	drm_gem_object_unreference_unlocked(&gem->base);
 
 	submit->fence = fence;
@@ -2181,29 +2194,28 @@ err_unlock_idr:
 	return ret;
 }
 
-static inline bool fence_completed(struct g3d_context *ctx, uint32_t fence)
+static inline bool fence_completed(struct g3d_drvdata *g3d, uint32_t fence)
 {
-	return ctx->completed_fence >= fence;
+	return g3d->completed_fence >= fence;
 }
 
-static int g3d_wait_interruptible(struct g3d_context *ctx, uint32_t fence,
+static int g3d_wait_interruptible(struct g3d_drvdata *g3d, uint32_t fence,
 				  struct timespec *timeout)
 {
-	struct g3d_drvdata *g3d = ctx->g3d;
 	unsigned long remaining_jiffies;
 	unsigned long timeout_jiffies;
 	unsigned long start_jiffies;
 	int ret;
 
-	if (fence > ctx->submitted_fence) {
+	if (fence > g3d->submitted_fence) {
 		dev_err(g3d->dev, "waiting on invalid fence: %u (of %u)\n",
-			fence, ctx->submitted_fence);
+			fence, g3d->submitted_fence);
 		return -EINVAL;
 	}
 
 	if (!timeout) {
 		/* no-wait: */
-		if (fence_completed(ctx, fence))
+		if (fence_completed(g3d, fence))
 			return 0;
 
 		return -EBUSY;
@@ -2217,13 +2229,13 @@ static int g3d_wait_interruptible(struct g3d_context *ctx, uint32_t fence,
 	else
 		remaining_jiffies = timeout_jiffies - start_jiffies;
 
-	ret = wait_event_interruptible_timeout(ctx->fence_wq,
-			fence_completed(ctx, fence),
-			remaining_jiffies);
+	ret = wait_event_interruptible_timeout(g3d->fence_wq,
+						fence_completed(g3d, fence),
+						remaining_jiffies);
 	if (ret == 0) {
 		dev_dbg_events(g3d->dev,
 			"timeout waiting for fence: %u (completed: %u)",
-			fence, ctx->completed_fence);
+			fence, g3d->completed_fence);
 		ret = -ETIMEDOUT;
 	} else if (ret > 0) {
 		ret = 0;
@@ -2236,28 +2248,14 @@ int s3c6410_g3d_wait(struct drm_device *dev, void *data, struct drm_file *file)
 {
 	struct drm_exynos_file_private *file_priv = file->driver_priv;
 	struct g3d_priv *priv = file_priv->g3d_priv;
+	struct g3d_drvdata *g3d = priv->g3d;
 	struct drm_exynos_g3d_wait *wait = data;
-	struct g3d_context *ctx;
 	struct timespec ts;
-	int ret;
-
-	down_read(&priv->pipes_idr_sem);
-
-	ctx = g3d_get_context(priv, wait->pipe);
-	if (IS_ERR(ctx)) {
-		ret = PTR_ERR(ctx);
-		goto unlock;
-	}
 
 	ts.tv_sec = wait->timeout.tv_sec;
 	ts.tv_nsec = wait->timeout.tv_nsec;
 
-	ret = g3d_wait_interruptible(ctx, wait->fence, &ts);
-
-unlock:
-	up_read(&priv->pipes_idr_sem);
-
-	return ret;
+	return g3d_wait_interruptible(g3d, wait->fence, &ts);
 }
 
 int s3c6410_g3d_create_pipe(struct drm_device *drm_dev, void *data,
@@ -2283,7 +2281,6 @@ int s3c6410_g3d_create_pipe(struct drm_device *drm_dev, void *data,
 	ctx->file = file;
 
 	INIT_LIST_HEAD(&ctx->list);
-	init_waitqueue_head(&ctx->fence_wq);
 	INIT_LIST_HEAD(&ctx->state_update_list);
 	INIT_LIST_HEAD(&ctx->state_restore_list);
 	INIT_LIST_HEAD(&ctx->request_list);
@@ -2292,7 +2289,7 @@ int s3c6410_g3d_create_pipe(struct drm_device *drm_dev, void *data,
 	memcpy(ctx->register_masks, g3d_register_masks_def,
 						sizeof(ctx->register_masks));
 
-	ret = idr_alloc(&priv->pipes_idr, ctx, 0, 0, GFP_KERNEL);
+	ret = idr_alloc(&priv->pipes_idr, ctx, 1, 0, GFP_KERNEL);
 	if (ret < 0) {
 		dev_err(g3d->dev, "failed to allocate pipe ID (%d)\n", ret);
 		goto err_free;
@@ -2470,6 +2467,8 @@ static int g3d_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&g3d->ready_list);
 	init_waitqueue_head(&g3d->ready_wq);
 	mutex_init(&g3d->stall_mutex);
+	init_waitqueue_head(&g3d->fence_wq);
+	atomic_set(&g3d->next_fence, 0);
 
 	platform_set_drvdata(pdev, g3d);
 
