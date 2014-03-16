@@ -173,6 +173,7 @@ struct g3d_drvdata {
 enum g3d_context_state_bits {
 	G3D_CONTEXT_FULL_RESTORE,
 	G3D_CONTEXT_STOP_PIXEL_SHADER,
+	G3D_CONTEXT_ABORTED,
 };
 
 struct g3d_validation_data {
@@ -193,7 +194,6 @@ struct g3d_context {
 	struct drm_file *file;
 
 	struct list_head state_update_list;
-	struct list_head state_restore_list;
 
 	struct mutex submit_mutex;
 	struct list_head submit_list;
@@ -210,6 +210,7 @@ struct g3d_context {
 	struct g3d_validation_data validation;
 
 	unsigned long state;
+	unsigned int dirty_level;
 };
 
 struct g3d_submit {
@@ -779,12 +780,17 @@ static inline void g3d_request_apply(struct g3d_drvdata *g3d,
 static void g3d_restore_context(struct g3d_drvdata *g3d,
 				struct g3d_context *ctx)
 {
-	struct g3d_request *req;
+	int i;
 
 	g3d_reg_cache_sync_all(g3d, ctx);
 
-	list_for_each_entry(req, &ctx->state_restore_list, list)
-		g3d_request_apply(g3d, req);
+	for (i = 0; i < G3D_NUM_SHADERS; ++i)
+		if (ctx->shader_program[i])
+			g3d_request_apply(g3d, ctx->shader_program[i]);
+
+	for (i = 0; i < G3D_NUM_TEXTURES; ++i)
+		if (ctx->texture[i])
+			g3d_request_apply(g3d, ctx->texture[i]);
 }
 
 /* Helper for state update requests */
@@ -820,35 +826,54 @@ static inline void g3d_request_get(struct g3d_request *req)
 }
 
 /* State update */
-static void g3d_state_update_and_restore(struct g3d_drvdata *g3d,
+static inline void g3d_state_mark_dirty(struct g3d_context *ctx,
+					unsigned int level)
+{
+	if (level > ctx->dirty_level)
+		ctx->dirty_level = level;
+}
+
+static void g3d_state_update(struct g3d_drvdata *g3d,
+					 struct g3d_context *ctx)
+{
+	struct g3d_request *req;
+
+	list_for_each_entry(req, &ctx->state_update_list, list)
+		g3d_request_update_state(g3d, req);
+}
+
+static void g3d_state_restore(struct g3d_drvdata *g3d,
 					 struct g3d_context *ctx)
 {
 	struct g3d_request *req, *p;
 
-	list_for_each_entry_safe(req, p, &ctx->state_update_list, list) {
-		g3d_request_update_state(g3d, req);
+	list_for_each_entry_safe(req, p, &ctx->state_update_list, list)
 		g3d_request_put(req);
-	}
+
+	INIT_LIST_HEAD(&ctx->state_update_list);
 
 	g3d_restore_context(g3d, ctx);
 }
 
-static void g3d_state_update_and_apply(struct g3d_drvdata *g3d,
+static void g3d_state_apply(struct g3d_drvdata *g3d,
 				       struct g3d_context *ctx)
 {
 	struct g3d_request *req, *p;
 
 	list_for_each_entry_safe(req, p, &ctx->state_update_list, list) {
-		g3d_request_update_state(g3d, req);
 		g3d_request_apply(g3d, req);
 		g3d_request_put(req);
 	}
+
+	INIT_LIST_HEAD(&ctx->state_update_list);
 }
 
 static void g3d_update_state(struct g3d_drvdata *g3d, struct g3d_context *ctx)
 {
 	int ret;
 	bool was_powered_down = false;
+
+	g3d_state_update(g3d, ctx);
 
 	if (test_and_clear_bit(G3D_STATE_IDLE, &g3d->state)) {
 		ret = pm_runtime_get_sync(g3d->dev);
@@ -864,24 +889,22 @@ static void g3d_update_state(struct g3d_drvdata *g3d, struct g3d_context *ctx)
 		g3d_flush_pipeline(g3d, G3D_FLUSH_PER_FRAGMENT, false);
 		set_bit(G3D_CONTEXT_FULL_RESTORE, &ctx->state);
 		set_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state);
-	} else if (!list_empty(&ctx->state_update_list)) {
-		g3d_flush_pipeline(g3d, G3D_FLUSH_PER_FRAGMENT, false);
 	} else {
-		g3d_flush_pipeline(g3d, G3D_FLUSH_VERTEX_FIFO, false);
+		g3d_flush_pipeline(g3d, ctx->dirty_level, false);
 	}
 
 	if (test_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state))
 		g3d_stop_pixel_shader(g3d);
 
 	if (test_and_clear_bit(G3D_CONTEXT_FULL_RESTORE, &ctx->state))
-		g3d_state_update_and_restore(g3d, ctx);
+		g3d_state_restore(g3d, ctx);
 	else
-		g3d_state_update_and_apply(g3d, ctx);
+		g3d_state_apply(g3d, ctx);
 
 	if (test_and_clear_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state))
 		g3d_start_pixel_shader(g3d);
 
-	INIT_LIST_HEAD(&ctx->state_update_list);
+	ctx->dirty_level = G3D_FLUSH_VERTEX_FIFO;
 	g3d->last_ctx = ctx;
 }
 
@@ -909,6 +932,8 @@ static int g3d_process_state_buffer(struct g3d_drvdata *g3d,
 	struct g3d_context *ctx = req->ctx;
 	const struct g3d_state_entry *reg = req_data(req);
 	unsigned int count = req_length(req) / sizeof(*reg);
+	unsigned int max_reg = 0;
+	unsigned int dirty_level;
 
 	while (count--) {
 		uint32_t val = reg->val;
@@ -916,10 +941,24 @@ static int g3d_process_state_buffer(struct g3d_drvdata *g3d,
 			uint32_t mask = ctx->register_masks[reg->reg];
 			val &= mask;
 			val |= ctx->registers[reg->reg] & ~mask;
+			max_reg = 0x80000000;
 		}
 		ctx->registers[reg->reg] = val;
+		if (reg->reg > max_reg)
+			max_reg = reg->reg;
 		++reg;
 	}
+
+	if (max_reg < FGPE_VERTEX_CONTEXT)
+		dirty_level = G3D_FLUSH_VERTEX_FIFO;
+	if (max_reg < FGRA_PIX_SAMP)
+		dirty_level = G3D_FLUSH_TRIANGLE_SETUP;
+	else if (max_reg < FGPF_ALPHAT)
+		dirty_level = G3D_FLUSH_RASTER;
+	else
+		dirty_level = G3D_FLUSH_PER_FRAGMENT;
+
+	g3d_state_mark_dirty(ctx, dirty_level);
 
 	return 0;
 }
@@ -1122,19 +1161,6 @@ static void g3d_free_shader_program(struct g3d_drvdata *g3d,
 	drm_gem_object_unreference_unlocked(&sp->obj->base);
 }
 
-static int g3d_handle_shader_program(struct g3d_drvdata *g3d,
-				     struct g3d_request *req)
-{
-	struct g3d_context *ctx = req->ctx;
-	struct g3d_shader_program *sp = req_data(req);
-	struct g3d_req_shader_program *rsp = sp->req;
-
-	if (RSP_UNIT(rsp) == G3D_SHADER_PIXEL)
-		set_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state);
-
-	return g3d_handle_state_update(g3d, req);
-}
-
 static int g3d_process_shader_program(struct g3d_drvdata *g3d,
 				      struct g3d_request *req)
 {
@@ -1144,10 +1170,8 @@ static int g3d_process_shader_program(struct g3d_drvdata *g3d,
 	struct g3d_request *prev_req;
 
 	prev_req = ctx->shader_program[RSP_UNIT(rsp)];
-	if (prev_req) {
-		list_del(&prev_req->list);
+	if (prev_req)
 		g3d_request_put(prev_req);
-	}
 
 	if (!sp->obj) {
 		/* Shader detach request */
@@ -1157,7 +1181,13 @@ static int g3d_process_shader_program(struct g3d_drvdata *g3d,
 
 	g3d_request_get(req);
 	ctx->shader_program[RSP_UNIT(rsp)] = req;
-	list_add_tail(&req->list, &ctx->state_restore_list);
+
+	if (RSP_UNIT(rsp) == G3D_SHADER_PIXEL) {
+		set_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state);
+		g3d_state_mark_dirty(ctx, G3D_FLUSH_PIXEL_SHADER);
+	} else {
+		g3d_state_mark_dirty(ctx, G3D_FLUSH_VERTEX_SHADER);
+	}
 
 	return 0;
 }
@@ -1170,6 +1200,7 @@ static int g3d_apply_shader_program(struct g3d_drvdata *g3d,
 	const uint32_t *buf;
 	uint32_t offset;
 	uint32_t len;
+	int i;
 
 	if (!sp->obj)
 		return 0;
@@ -1181,6 +1212,18 @@ static int g3d_apply_shader_program(struct g3d_drvdata *g3d,
 	while (len--) {
 		g3d_write_relaxed(g3d, *(buf++), offset);
 		offset += 4;
+	}
+
+	for (i = 0; i < G3D_NUM_SHADER_DATA_TYPES; ++i) {
+		buf = sp->data + sp->type_offset[i];
+		len = RSP_DCOUNT(rsp, i);
+		offset = g3d_shader_base[RSP_UNIT(rsp)]
+						+ g3d_shader_data_reg_base[i];
+
+		while (len--) {
+			g3d_write_relaxed(g3d, *(buf++), offset);
+			offset += 4;
+		}
 	}
 
 	switch (RSP_UNIT(rsp)) {
@@ -1262,18 +1305,6 @@ static int g3d_validate_shader_data(struct g3d_drvdata *g3d,
 	return 0;
 }
 
-static int g3d_handle_shader_data(struct g3d_drvdata *g3d,
-				  struct g3d_request *req)
-{
-	struct g3d_context *ctx = req->ctx;
-	struct g3d_req_shader_data *rsd = req_data(req);
-
-	if (RSD_UNIT(rsd) == G3D_SHADER_PIXEL)
-		set_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state);
-
-	return g3d_handle_state_update(g3d, req);
-}
-
 static int g3d_process_shader_data(struct g3d_drvdata *g3d,
 				   struct g3d_request *req)
 {
@@ -1286,6 +1317,13 @@ static int g3d_process_shader_data(struct g3d_drvdata *g3d,
 
 	memcpy(sp->data + sp->type_offset[RSD_TYPE(rsd)] + RSD_OFFSET(rsd),
 		rsd->data, count * 4);
+
+	if (RSD_UNIT(rsd) == G3D_SHADER_PIXEL) {
+		g3d_state_mark_dirty(ctx, G3D_FLUSH_PIXEL_SHADER);
+		set_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state);
+	} else {
+		g3d_state_mark_dirty(ctx, G3D_FLUSH_VERTEX_SHADER);
+	}
 
 	return 0;
 }
@@ -1397,10 +1435,8 @@ static int g3d_process_texture(struct g3d_drvdata *g3d,
 	struct g3d_request *prev_req;
 
 	prev_req = ctx->texture[TEX_UNIT(rts->flags)];
-	if (prev_req) {
-		list_del(&prev_req->list);
+	if (prev_req)
 		g3d_request_put(prev_req);
-	}
 
 	if (!tex->obj) {
 		/* Disable texture request */
@@ -1410,7 +1446,8 @@ static int g3d_process_texture(struct g3d_drvdata *g3d,
 
 	g3d_request_get(req);
 	ctx->texture[TEX_UNIT(rts->flags)] = req;
-	list_add_tail(&req->list, &ctx->state_restore_list);
+
+	g3d_state_mark_dirty(ctx, G3D_FLUSH_PIXEL_SHADER);
 
 	return 0;
 }
@@ -1543,6 +1580,7 @@ static int g3d_process_colorbuffer(struct g3d_drvdata *g3d,
 
 	g3d_request_get(req);
 	ctx->colorbuffer = req;
+	g3d_state_mark_dirty(ctx, G3D_FLUSH_PER_FRAGMENT);
 
 	return 0;
 }
@@ -1667,6 +1705,7 @@ static int g3d_process_depthbuffer(struct g3d_drvdata *g3d,
 
 	g3d_request_get(req);
 	ctx->depthbuffer = req;
+	g3d_state_mark_dirty(ctx, G3D_FLUSH_PER_FRAGMENT);
 
 	return 0;
 }
@@ -1709,7 +1748,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 	[G3D_REQUEST_SHADER_PROGRAM] = {
 		.validate = g3d_validate_shader_program,
 		.free = g3d_free_shader_program,
-		.handle = g3d_handle_shader_program,
+		.handle = g3d_handle_state_update,
 		.update_state = g3d_process_shader_program,
 		.apply = g3d_apply_shader_program,
 		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
@@ -1718,7 +1757,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 	},
 	[G3D_REQUEST_SHADER_DATA] = {
 		.validate = g3d_validate_shader_data,
-		.handle = g3d_handle_shader_data,
+		.handle = g3d_handle_state_update,
 		.update_state = g3d_process_shader_data,
 		.apply = g3d_apply_shader_data,
 		.length = G3D_SHADER_DATA_MAX_SIZE,
@@ -1848,19 +1887,12 @@ static int g3d_wait_interruptible_timeout(struct g3d_drvdata *g3d,
 	return ret;
 }
 
-static int g3d_wait_interruptible(struct g3d_drvdata *g3d, uint32_t fence)
-{
-	struct timespec ts = { .tv_sec = 0, .tv_nsec = 0 };
-
-	return g3d_wait_interruptible_timeout(g3d, fence, &ts);
-}
-
 /* Fence request */
 static int g3d_signal_fence(struct g3d_drvdata *g3d, uint32_t fence)
 {
 	g3d->completed_fence = fence;
 
-	wake_up_interruptible_all(&g3d->fence_wq);
+	wake_up_all(&g3d->fence_wq);
 
 	return 0;
 }
@@ -1870,35 +1902,41 @@ static int g3d_get_next_request(struct g3d_drvdata *g3d,
 				struct g3d_request **req)
 {
 	struct g3d_submit *submit;
+	struct g3d_context *ctx;
 
-	if (list_empty(&g3d->submit_list))
-		return 0;
-
-	submit = list_first_entry(&g3d->submit_list, struct g3d_submit, list);
-	if (list_empty(&submit->request_list)) {
-		list_del(&submit->list_ctx);
-		list_del(&submit->list);
-
-		spin_unlock(&g3d->ready_lock);
-
-		g3d_flush_pipeline(g3d, G3D_FLUSH_COLOR_CACHE, false);
-		g3d_flush_caches(g3d);
-		g3d_signal_fence(g3d, submit->fence);
-		kfree(submit);
-
-		spin_lock(&g3d->ready_lock);
-
-		if (list_empty(&g3d->submit_list))
-			return 0;
-
+	while (!list_empty(&g3d->submit_list)) {
 		submit = list_first_entry(&g3d->submit_list,
 						struct g3d_submit, list);
+		ctx = submit->ctx;
+
+		if (list_empty(&submit->request_list)
+		    || test_bit(G3D_CONTEXT_ABORTED, &ctx->state)) {
+			uint32_t timestamp = submit->fence;
+
+			list_del(&submit->list);
+			if (!test_bit(G3D_CONTEXT_ABORTED, &ctx->state)) {
+				list_del(&submit->list_ctx);
+				kfree(submit);
+			}
+
+			spin_unlock(&g3d->ready_lock);
+
+			g3d_flush_pipeline(g3d, G3D_FLUSH_COLOR_CACHE, false);
+			g3d_flush_caches(g3d);
+			g3d_signal_fence(g3d, timestamp);
+
+			spin_lock(&g3d->ready_lock);
+
+			continue;
+		}
+
+		*req = list_first_entry(&submit->request_list,
+					struct g3d_request, list);
+		list_del(&(*req)->list);
+		return 1;
 	}
 
-	*req = list_first_entry(&submit->request_list,
-					struct g3d_request, list);
-	list_del(&(*req)->list);
-	return 1;
+	return 0;
 }
 
 /* Main loop of virtual request processor */
@@ -2250,7 +2288,6 @@ int s3c6410_g3d_create_pipe(struct drm_device *drm_dev, void *data,
 	ctx->file = file;
 
 	INIT_LIST_HEAD(&ctx->state_update_list);
-	INIT_LIST_HEAD(&ctx->state_restore_list);
 	INIT_LIST_HEAD(&ctx->submit_list);
 	mutex_init(&ctx->submit_mutex);
 
@@ -2281,23 +2318,33 @@ static int g3d_destroy_context(struct g3d_context *ctx)
 {
 	struct g3d_drvdata *g3d = ctx->g3d;
 	struct g3d_request *req, *n;
-	int ret;
+	struct g3d_submit *submit, *sn;
+	int i;
 
-	ret = g3d_wait_interruptible(g3d, ctx->last_fence);
-	if (ret)
-		return ret;
+	set_bit(G3D_CONTEXT_ABORTED, &ctx->state);
+	wait_event(g3d->fence_wq, fence_completed(g3d, ctx->last_fence));
 
-	BUG_ON(!list_empty(&ctx->submit_list));
+	list_for_each_entry_safe(submit, sn, &ctx->submit_list, list_ctx) {
+		list_for_each_entry_safe(req, n, &submit->request_list, list) {
+			list_del(&req->list);
+			g3d_request_put(req);
+		}
+		list_del(&submit->list_ctx);
+		kfree(submit);
+	}
 
 	list_for_each_entry_safe(req, n, &ctx->state_update_list, list) {
 		list_del(&req->list);
 		g3d_request_put(req);
 	}
 
-	list_for_each_entry_safe(req, n, &ctx->state_restore_list, list) {
-		list_del(&req->list);
-		g3d_request_put(req);
-	}
+	for (i = 0; i < G3D_NUM_SHADERS; ++i)
+		if (ctx->shader_program[i])
+			g3d_request_put(ctx->shader_program[i]);
+
+	for (i = 0; i < G3D_NUM_TEXTURES; ++i)
+		if (ctx->texture[i])
+			g3d_request_put(ctx->texture[i]);
 
 	if (ctx->colorbuffer)
 		g3d_request_put(ctx->colorbuffer);
