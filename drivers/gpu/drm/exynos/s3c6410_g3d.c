@@ -110,8 +110,6 @@
 /*
  * Request flags
  */
-#define G3D_REQUEST_MARK_PREEMPTION	(1 << 0)
-#define G3D_REQUEST_PREEMPTION_POINT	(1 << 1)
 #define G3D_REQUEST_UPDATE_STATE	(1 << 2)
 #define G3D_REQUEST_STRICT_SIZE_CHECK	(1 << 3)
 
@@ -129,7 +127,6 @@ struct g3d_context;
 
 enum g3d_state_bits {
 	G3D_STATE_IDLE,
-	G3D_STATE_PREEMPTED,
 };
 
 enum g3d_flush_level {
@@ -158,7 +155,7 @@ struct g3d_drvdata {
 	struct mutex stall_mutex;
 
 	spinlock_t ready_lock;
-	struct list_head ready_list;
+	struct list_head submit_list;
 	wait_queue_head_t ready_wq;
 
 	atomic_t next_fence;
@@ -175,7 +172,6 @@ struct g3d_drvdata {
 
 enum g3d_context_state_bits {
 	G3D_CONTEXT_FULL_RESTORE,
-	G3D_CONTEXT_FLUSHED,
 	G3D_CONTEXT_STOP_PIXEL_SHADER,
 };
 
@@ -195,13 +191,13 @@ struct g3d_context {
 	struct g3d_drvdata *g3d;
 	struct drm_device *drm_dev;
 	struct drm_file *file;
-	struct list_head list;
 
 	struct list_head state_update_list;
 	struct list_head state_restore_list;
 
 	struct mutex submit_mutex;
-	struct list_head request_list;
+	struct list_head submit_list;
+	uint32_t last_fence;
 
 	uint32_t registers[G3D_NUM_REGISTERS];
 	uint32_t register_masks[G3D_NUM_PROT_REGISTERS];
@@ -214,6 +210,14 @@ struct g3d_context {
 	struct g3d_validation_data validation;
 
 	unsigned long state;
+};
+
+struct g3d_submit {
+	struct g3d_context *ctx;
+	struct list_head request_list;
+	uint32_t fence;
+	struct list_head list;
+	struct list_head list_ctx;
 };
 
 struct g3d_request {
@@ -594,7 +598,7 @@ static int g3d_wait_for_flush(struct g3d_drvdata *g3d, uint32_t mask, bool idle)
 
 	ret = wait_event_interruptible_timeout(g3d->ready_wq,
 				g3d_pipeline_idle(g3d, mask)
-				|| (idle && !list_empty(&g3d->ready_list)),
+				|| (idle && !list_empty(&g3d->submit_list)),
 				msecs_to_jiffies(G3D_FLUSH_TIMEOUT));
 
 	g3d_idle_irq_ack_and_disable(g3d);
@@ -858,8 +862,6 @@ static void g3d_update_state(struct g3d_drvdata *g3d, struct g3d_context *ctx)
 		set_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state);
 	} else if (g3d->last_ctx != ctx) {
 		g3d_flush_pipeline(g3d, G3D_FLUSH_PER_FRAGMENT, false);
-		if (g3d->last_ctx)
-			set_bit(G3D_CONTEXT_FLUSHED, &g3d->last_ctx->state);
 		set_bit(G3D_CONTEXT_FULL_RESTORE, &ctx->state);
 		set_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state);
 	} else if (!list_empty(&ctx->state_update_list)) {
@@ -1009,26 +1011,6 @@ static int g3d_handle_draw_buffer(struct g3d_drvdata *g3d,
 
 	g3d_write(g3d, rdb->vertices, G3D_FGHI_FIFO_ENTRY_REG);
 	g3d_write(g3d, 0, G3D_FGHI_FIFO_ENTRY_REG);
-
-	clear_bit(G3D_CONTEXT_FLUSHED, &req->ctx->state);
-
-	g3d_request_put(req);
-
-	return 0;
-}
-
-/* Fence request */
-static int g3d_handle_fence(struct g3d_drvdata *g3d, struct g3d_request *req)
-{
-	uint32_t *timestamp = (uint32_t *)req->data;
-
-	g3d_flush_pipeline(g3d, G3D_FLUSH_COLOR_CACHE, false);
-	g3d_flush_caches(g3d);
-
-	if (*timestamp > g3d->completed_fence)
-		g3d->completed_fence = *timestamp;
-
-	wake_up_interruptible_all(&g3d->fence_wq);
 
 	g3d_request_put(req);
 
@@ -1722,7 +1704,6 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.handle = g3d_handle_state_update,
 		.update_state = g3d_process_state_buffer,
 		.apply = g3d_apply_state_buffer,
-		.flags = G3D_REQUEST_PREEMPTION_POINT,
 		.length = G3D_STATE_BUFFER_MAX_SIZE,
 	},
 	[G3D_REQUEST_SHADER_PROGRAM] = {
@@ -1731,8 +1712,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.handle = g3d_handle_shader_program,
 		.update_state = g3d_process_shader_program,
 		.apply = g3d_apply_shader_program,
-		.flags = G3D_REQUEST_PREEMPTION_POINT |
-				G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
 		.length = sizeof(struct g3d_req_shader_program),
 		.priv_length = sizeof(struct g3d_shader_program),
 	},
@@ -1741,7 +1721,6 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.handle = g3d_handle_shader_data,
 		.update_state = g3d_process_shader_data,
 		.apply = g3d_apply_shader_data,
-		.flags = G3D_REQUEST_PREEMPTION_POINT,
 		.length = G3D_SHADER_DATA_MAX_SIZE,
 	},
 	[G3D_REQUEST_TEXTURE] = {
@@ -1750,8 +1729,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.handle = g3d_handle_state_update,
 		.update_state = g3d_process_texture,
 		.apply = g3d_apply_texture,
-		.flags = G3D_REQUEST_PREEMPTION_POINT |
-				G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
 		.length = sizeof(struct g3d_req_texture_setup),
 		.priv_length = sizeof(struct g3d_texture),
 	},
@@ -1761,8 +1739,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.handle = g3d_handle_state_update,
 		.update_state = g3d_process_colorbuffer,
 		.apply = g3d_apply_colorbuffer,
-		.flags = G3D_REQUEST_PREEMPTION_POINT |
-				G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
 		.length = sizeof(struct g3d_req_colorbuffer_setup),
 		.priv_length = sizeof(struct g3d_colorbuffer),
 	},
@@ -1772,8 +1749,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.handle = g3d_handle_state_update,
 		.update_state = g3d_process_depthbuffer,
 		.apply = g3d_apply_depthbuffer,
-		.flags = G3D_REQUEST_PREEMPTION_POINT |
-				G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
 		.length = sizeof(struct g3d_req_depthbuffer_setup),
 		.priv_length = sizeof(struct g3d_depthbuffer),
 	},
@@ -1781,16 +1757,10 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.validate = g3d_validate_draw_buffer,
 		.free = g3d_free_draw_buffer,
 		.handle = g3d_handle_draw_buffer,
-		.flags = G3D_REQUEST_PREEMPTION_POINT |
-				G3D_REQUEST_UPDATE_STATE |
+		.flags = G3D_REQUEST_UPDATE_STATE |
 				G3D_REQUEST_STRICT_SIZE_CHECK,
 		.length = sizeof(struct g3d_req_draw_buffer),
 		.priv_length = sizeof(struct g3d_draw_buffer),
-	},
-	[G3D_REQUEST_FENCE] = {
-		.handle = g3d_handle_fence,
-		.flags = G3D_REQUEST_MARK_PREEMPTION |
-				G3D_REQUEST_STRICT_SIZE_CHECK,
 	},
 };
 
@@ -1807,7 +1777,7 @@ static void g3d_do_idle(struct g3d_drvdata *g3d)
 
 	g3d_flush_pipeline(g3d, G3D_FLUSH_COLOR_CACHE, true);
 
-	if (!list_empty(&g3d->ready_list)) {
+	if (!list_empty(&g3d->submit_list)) {
 		dev_dbg_events(g3d->dev, "%s (commands ready)\n", __func__);
 		return;
 	}
@@ -1822,45 +1792,113 @@ static void g3d_do_idle(struct g3d_drvdata *g3d)
 	dev_dbg_events(g3d->dev, "%s (idle)\n", __func__);
 }
 
-/* Primitive request scheduler */
-static struct g3d_request *g3d_get_next_request(struct g3d_drvdata *g3d)
+static inline bool fence_completed(struct g3d_drvdata *g3d, uint32_t fence)
 {
-	const struct g3d_request_info *req_info;
-	struct g3d_request *req;
-	struct g3d_context *ctx;
+	return g3d->completed_fence >= fence;
+}
 
-	ctx = list_first_entry(&g3d->ready_list, struct g3d_context, list);
+static int g3d_wait_interruptible_timeout(struct g3d_drvdata *g3d,
+					  uint32_t fence,
+					  struct timespec *timeout)
+{
+	unsigned long remaining_jiffies;
+	unsigned long timeout_jiffies;
+	unsigned long start_jiffies;
+	int ret;
 
-	req = list_first_entry(&ctx->request_list, struct g3d_request, list);
-	req_info = &g3d_requests[REQ_TYPE(&req->header)];
-
-	if (req_info->flags & G3D_REQUEST_PREEMPTION_POINT
-	    && test_and_clear_bit(G3D_STATE_PREEMPTED, &g3d->state)) {
-		list_del(&ctx->list);
-		list_add_tail(&ctx->list, &g3d->ready_list);
-
-		ctx = list_first_entry(&g3d->ready_list,
-						struct g3d_context, list);
-
-		dev_dbg_events(g3d->dev, "preempted ctx %p to ctx %p",
-				req->ctx, ctx);
-
-		req = list_first_entry(&ctx->request_list,
-						struct g3d_request, list);
-		req_info = &g3d_requests[REQ_TYPE(&req->header)];
+	if (fence > g3d->submitted_fence) {
+		dev_err(g3d->dev, "waiting on invalid fence: %u (of %u)\n",
+			fence, g3d->submitted_fence);
+		return -EINVAL;
 	}
 
-	list_del(&req->list);
+	if (!timeout) {
+		/* no-wait: */
+		if (fence_completed(g3d, fence))
+			return 0;
 
-	if (list_empty(&ctx->request_list))
-		list_del_init(&ctx->list);
-
-	if (req_info->flags & G3D_REQUEST_MARK_PREEMPTION) {
-		set_bit(G3D_STATE_PREEMPTED, &g3d->state);
-		dev_dbg_events(g3d->dev, "ctx %p marked preemption\n", ctx);
+		return -EBUSY;
 	}
 
-	return req;
+	timeout_jiffies = timespec_to_jiffies(timeout);
+	start_jiffies = jiffies;
+
+	if (!timeout_jiffies) {
+		return wait_event_interruptible(g3d->fence_wq,
+						fence_completed(g3d, fence));
+	}
+
+	if (time_after(start_jiffies, timeout_jiffies))
+		remaining_jiffies = 0;
+	else
+		remaining_jiffies = timeout_jiffies - start_jiffies;
+
+	ret = wait_event_interruptible_timeout(g3d->fence_wq,
+						fence_completed(g3d, fence),
+						remaining_jiffies);
+	if (ret == 0) {
+		dev_dbg_events(g3d->dev,
+			"timeout waiting for fence: %u (completed: %u)",
+			fence, g3d->completed_fence);
+		ret = -ETIMEDOUT;
+	} else if (ret > 0) {
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static int g3d_wait_interruptible(struct g3d_drvdata *g3d, uint32_t fence)
+{
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 0 };
+
+	return g3d_wait_interruptible_timeout(g3d, fence, &ts);
+}
+
+/* Fence request */
+static int g3d_signal_fence(struct g3d_drvdata *g3d, uint32_t fence)
+{
+	g3d->completed_fence = fence;
+
+	wake_up_interruptible_all(&g3d->fence_wq);
+
+	return 0;
+}
+
+/* Primitive request scheduler */
+static int g3d_get_next_request(struct g3d_drvdata *g3d,
+				struct g3d_request **req)
+{
+	struct g3d_submit *submit;
+
+	if (list_empty(&g3d->submit_list))
+		return 0;
+
+	submit = list_first_entry(&g3d->submit_list, struct g3d_submit, list);
+	if (list_empty(&submit->request_list)) {
+		list_del(&submit->list_ctx);
+		list_del(&submit->list);
+
+		spin_unlock(&g3d->ready_lock);
+
+		g3d_flush_pipeline(g3d, G3D_FLUSH_COLOR_CACHE, false);
+		g3d_flush_caches(g3d);
+		g3d_signal_fence(g3d, submit->fence);
+		kfree(submit);
+
+		spin_lock(&g3d->ready_lock);
+
+		if (list_empty(&g3d->submit_list))
+			return 0;
+
+		submit = list_first_entry(&g3d->submit_list,
+						struct g3d_submit, list);
+	}
+
+	*req = list_first_entry(&submit->request_list,
+					struct g3d_request, list);
+	list_del(&(*req)->list);
+	return 1;
 }
 
 /* Main loop of virtual request processor */
@@ -1880,7 +1918,7 @@ static int g3d_command_thread(void *data)
 
 		spin_lock(&g3d->ready_lock);
 
-		while (list_empty(&g3d->ready_list)) {
+		while (!g3d_get_next_request(g3d, &req)) {
 			spin_unlock(&g3d->ready_lock);
 
 			mutex_unlock(&g3d->stall_mutex);
@@ -1888,7 +1926,7 @@ static int g3d_command_thread(void *data)
 			g3d_do_idle(g3d);
 
 			ret = wait_event_freezable(g3d->ready_wq,
-					!list_empty(&g3d->ready_list)
+					!list_empty(&g3d->submit_list)
 					|| kthread_should_stop());
 			if (ret && kthread_should_stop())
 				goto finish;
@@ -1901,7 +1939,6 @@ static int g3d_command_thread(void *data)
 			spin_lock(&g3d->ready_lock);
 		}
 
-		req = g3d_get_next_request(g3d);
 		req_info = &g3d_requests[REQ_TYPE(&req->header)];
 		ctx = req->ctx;
 
@@ -1941,32 +1978,9 @@ static irqreturn_t g3d_handle_irq(int irq, void *dev_id)
 /*
  * Request submission
  */
-static struct g3d_request *g3d_allocate_fence(struct g3d_drvdata *g3d,
-					      struct g3d_context *ctx,
-					      uint32_t *fence)
-{
-	struct g3d_request *req;
-	uint32_t *timestamp;
-
-	req = kmalloc(sizeof(*req) + sizeof(*timestamp), GFP_KERNEL);
-	if (!req) {
-		dev_err(g3d->dev, "failed to allocate g3d request\n");
-		return ERR_PTR(-ENOMEM);
-	}
-	timestamp = (uint32_t *)req->data;
-
-	kref_init(&req->kref);
-	req->ctx = ctx;
-	req->header = REQ_HDR(G3D_REQUEST_FENCE, sizeof(*timestamp));
-	*timestamp = atomic_inc_return(&g3d->next_fence);
-
-	*fence = *timestamp;
-
-	return req;
-}
-
 static struct g3d_request *g3d_allocate_request(struct g3d_drvdata *g3d,
-	struct g3d_context *ctx, const uint32_t *req_data)
+						struct g3d_submit *submit,
+						const uint32_t *req_data)
 {
 	const struct g3d_request_info *info;
 	struct g3d_request *req;
@@ -2006,7 +2020,7 @@ static struct g3d_request *g3d_allocate_request(struct g3d_drvdata *g3d,
 		return ERR_PTR(-ENOMEM);
 	}
 	kref_init(&req->kref);
-	req->ctx = ctx;
+	req->ctx = submit->ctx;
 	req->header = req_data[0];
 
 	memcpy(req->data + info->priv_length, REQ_DATA(req_data), length);
@@ -2021,6 +2035,7 @@ static struct g3d_request *g3d_allocate_request(struct g3d_drvdata *g3d,
 		goto err_free;
 	}
 
+	list_add_tail(&req->list, &submit->request_list);
 	return req;
 
 err_free:
@@ -2029,19 +2044,22 @@ err_free:
 	return ERR_PTR(ret);
 }
 
-static void g3d_post_requests(struct g3d_drvdata *g3d, struct g3d_context *ctx,
-			      struct list_head *list, uint32_t fence)
+static uint32_t g3d_post_requests(struct g3d_drvdata *g3d,
+			      struct g3d_submit *submit)
 {
 	bool wake;
+	uint32_t fence;
 
 	spin_lock(&g3d->ready_lock);
 
-	list_splice_tail(list, &ctx->request_list);
+	fence = atomic_inc_return(&g3d->next_fence);
+	submit->fence = fence;
+	g3d->submitted_fence = fence;
+	submit->ctx->last_fence = fence;
 
-	wake = list_empty(&g3d->ready_list);
-
-	if (list_empty(&ctx->list))
-		list_add_tail(&ctx->list, &g3d->ready_list);
+	wake = list_empty(&g3d->submit_list);
+	list_add_tail(&submit->list_ctx, &submit->ctx->submit_list);
+	list_add_tail(&submit->list, &g3d->submit_list);
 
 	if (wake) {
 		dev_dbg_events(g3d->dev, "%s:%d waking up ready_wq\n",
@@ -2049,9 +2067,9 @@ static void g3d_post_requests(struct g3d_drvdata *g3d, struct g3d_context *ctx,
 		wake_up_interruptible_sync(&g3d->ready_wq);
 	}
 
-	g3d->submitted_fence = fence;
-
 	spin_unlock(&g3d->ready_lock);
+
+	return fence;
 }
 
 static struct g3d_context *g3d_get_context(struct g3d_priv *priv, int id)
@@ -2079,10 +2097,9 @@ int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 	struct exynos_drm_gem_obj *gem;
 	struct g3d_request *req, *n;
 	struct g3d_context *ctx;
-	LIST_HEAD(submit_list);
+	struct g3d_submit *sub;
 	const uint32_t *sdata;
 	uint32_t length;
-	uint32_t fence;
 	unsigned int i;
 	int ret = 0;
 
@@ -2125,6 +2142,17 @@ int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 		goto err_gem_unref;
 	}
 
+	sub = kzalloc(sizeof(*sub), GFP_KERNEL);
+	if (!sub) {
+		ret = -ENOMEM;
+		goto err_gem_unref;
+	}
+
+	sub->ctx = ctx;
+	INIT_LIST_HEAD(&sub->request_list);
+	INIT_LIST_HEAD(&sub->list);
+	INIT_LIST_HEAD(&sub->list_ctx);
+
 	sdata = gem->buffer->kvaddr + submit->offset;
 	length = submit->length;
 	memcpy(&validation_copy, &ctx->validation, sizeof(validation_copy));
@@ -2146,13 +2174,11 @@ int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 			goto err_free;
 		}
 
-		req = g3d_allocate_request(g3d, ctx, sdata);
+		req = g3d_allocate_request(g3d, sub, sdata);
 		if (IS_ERR(req)) {
 			ret = PTR_ERR(req);
 			goto err_free;
 		}
-
-		list_add_tail(&req->list, &submit_list);
 
 		sdata += req_length / sizeof(*sdata);
 		length -= req_length;
@@ -2160,20 +2186,11 @@ int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 
 	if (!i) {
 		ret = -EINVAL;
-		goto err_gem_unref;
+		goto err_free_submit;
 	}
 
-	req = g3d_allocate_fence(g3d, ctx, &fence);
-	if (IS_ERR(req)) {
-		ret = PTR_ERR(req);
-		goto err_free;
-	}
-	list_add_tail(&req->list, &submit_list);
-
-	g3d_post_requests(g3d, ctx, &submit_list, fence);
+	submit->fence = g3d_post_requests(g3d, sub);
 	drm_gem_object_unreference_unlocked(&gem->base);
-
-	submit->fence = fence;
 
 	mutex_unlock(&ctx->submit_mutex);
 	up_read(&priv->pipes_idr_sem);
@@ -2181,65 +2198,17 @@ int s3c6410_g3d_submit(struct drm_device *dev, void *data,
 	return 0;
 
 err_free:
-	list_for_each_entry_safe(req, n, &submit_list, list)
+	list_for_each_entry_safe(req, n, &sub->request_list, list)
 		g3d_request_put(req);
 	memcpy(&ctx->validation, &validation_copy, sizeof(validation_copy));
+err_free_submit:
+	kfree(sub);
 err_gem_unref:
 	drm_gem_object_unreference_unlocked(&gem->base);
 err_unlock_ctx:
 	mutex_unlock(&ctx->submit_mutex);
 err_unlock_idr:
 	up_read(&priv->pipes_idr_sem);
-
-	return ret;
-}
-
-static inline bool fence_completed(struct g3d_drvdata *g3d, uint32_t fence)
-{
-	return g3d->completed_fence >= fence;
-}
-
-static int g3d_wait_interruptible(struct g3d_drvdata *g3d, uint32_t fence,
-				  struct timespec *timeout)
-{
-	unsigned long remaining_jiffies;
-	unsigned long timeout_jiffies;
-	unsigned long start_jiffies;
-	int ret;
-
-	if (fence > g3d->submitted_fence) {
-		dev_err(g3d->dev, "waiting on invalid fence: %u (of %u)\n",
-			fence, g3d->submitted_fence);
-		return -EINVAL;
-	}
-
-	if (!timeout) {
-		/* no-wait: */
-		if (fence_completed(g3d, fence))
-			return 0;
-
-		return -EBUSY;
-	}
-
-	timeout_jiffies = timespec_to_jiffies(timeout);
-	start_jiffies = jiffies;
-
-	if (time_after(start_jiffies, timeout_jiffies))
-		remaining_jiffies = 0;
-	else
-		remaining_jiffies = timeout_jiffies - start_jiffies;
-
-	ret = wait_event_interruptible_timeout(g3d->fence_wq,
-						fence_completed(g3d, fence),
-						remaining_jiffies);
-	if (ret == 0) {
-		dev_dbg_events(g3d->dev,
-			"timeout waiting for fence: %u (completed: %u)",
-			fence, g3d->completed_fence);
-		ret = -ETIMEDOUT;
-	} else if (ret > 0) {
-		ret = 0;
-	}
 
 	return ret;
 }
@@ -2255,7 +2224,7 @@ int s3c6410_g3d_wait(struct drm_device *dev, void *data, struct drm_file *file)
 	ts.tv_sec = wait->timeout.tv_sec;
 	ts.tv_nsec = wait->timeout.tv_nsec;
 
-	return g3d_wait_interruptible(g3d, wait->fence, &ts);
+	return g3d_wait_interruptible_timeout(g3d, wait->fence, &ts);
 }
 
 int s3c6410_g3d_create_pipe(struct drm_device *drm_dev, void *data,
@@ -2280,10 +2249,9 @@ int s3c6410_g3d_create_pipe(struct drm_device *drm_dev, void *data,
 	ctx->g3d = g3d;
 	ctx->file = file;
 
-	INIT_LIST_HEAD(&ctx->list);
 	INIT_LIST_HEAD(&ctx->state_update_list);
 	INIT_LIST_HEAD(&ctx->state_restore_list);
-	INIT_LIST_HEAD(&ctx->request_list);
+	INIT_LIST_HEAD(&ctx->submit_list);
 	mutex_init(&ctx->submit_mutex);
 
 	memcpy(ctx->register_masks, g3d_register_masks_def,
@@ -2309,43 +2277,36 @@ err_unlock:
 	return ret;
 }
 
-static void g3d_destroy_context(struct g3d_context *ctx)
+static int g3d_destroy_context(struct g3d_context *ctx)
 {
 	struct g3d_drvdata *g3d = ctx->g3d;
 	struct g3d_request *req, *n;
+	int ret;
 
-	mutex_lock(&g3d->stall_mutex);
+	ret = g3d_wait_interruptible(g3d, ctx->last_fence);
+	if (ret)
+		return ret;
 
-	spin_lock(&g3d->ready_lock);
-
-	if (!list_empty(&ctx->list))
-		list_del(&ctx->list);
-
-	spin_unlock(&g3d->ready_lock);
-
-	mutex_unlock(&g3d->stall_mutex);
-
-	list_for_each_entry_safe(req, n, &ctx->request_list, list) {
-		list_del(&req->list);
-		g3d_request_release(&req->kref);
-	}
+	BUG_ON(!list_empty(&ctx->submit_list));
 
 	list_for_each_entry_safe(req, n, &ctx->state_update_list, list) {
 		list_del(&req->list);
-		g3d_request_release(&req->kref);
+		g3d_request_put(req);
 	}
 
 	list_for_each_entry_safe(req, n, &ctx->state_restore_list, list) {
 		list_del(&req->list);
-		g3d_request_release(&req->kref);
+		g3d_request_put(req);
 	}
 
 	if (ctx->colorbuffer)
 		g3d_request_put(ctx->colorbuffer);
 	if (ctx->depthbuffer)
-		g3d_request_put(ctx->colorbuffer);
+		g3d_request_put(ctx->depthbuffer);
 
 	kfree(ctx);
+
+	return 0;
 }
 
 int s3c6410_g3d_destroy_pipe(struct drm_device *drm_dev, void *data,
@@ -2355,13 +2316,15 @@ int s3c6410_g3d_destroy_pipe(struct drm_device *drm_dev, void *data,
 	struct g3d_priv *priv = file_priv->g3d_priv;
 	struct drm_exynos_g3d_pipe *pipe = data;
 	struct g3d_context *ctx;
+	int ret;
 
 	down_write(&priv->pipes_idr_sem);
 
 	ctx = g3d_get_context(priv, pipe->pipe);
 	if (!IS_ERR(ctx)) {
-		idr_remove(&priv->pipes_idr, pipe->pipe);
-		g3d_destroy_context(ctx);
+		ret = g3d_destroy_context(ctx);
+		if (!ret)
+			idr_remove(&priv->pipes_idr, pipe->pipe);
 	}
 
 	up_write(&priv->pipes_idr_sem);
@@ -2464,7 +2427,7 @@ static int g3d_probe(struct platform_device *pdev)
 
 	g3d->dev = &pdev->dev;
 	spin_lock_init(&g3d->ready_lock);
-	INIT_LIST_HEAD(&g3d->ready_list);
+	INIT_LIST_HEAD(&g3d->submit_list);
 	init_waitqueue_head(&g3d->ready_wq);
 	mutex_init(&g3d->stall_mutex);
 	init_waitqueue_head(&g3d->fence_wq);
