@@ -57,6 +57,16 @@
 			#interrupt-cells = <1>;
 		};
 
+		ohci: ohci@74300000 {
+			compatible = "samsung,s3c2410-ohci";
+			reg = <0x74300000 0x1000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <15>;
+			clock-names = "usb-host", "usb-bus-host";
+			clocks = <&clocks HCLK_UHOST>, <&clocks SCLK_UHOST>;
+			status = "disabled";
+		};
+
 		fimd: display@77100000 {
 			compatible = "samsung,s3c6400-fimd";
 			reg = <0x77100000 0x1000>;

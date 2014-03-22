@@ -167,6 +167,10 @@
 	};
 };
 
+&ohci {
+	status = "okay";
+};
+
 &fimd {
 	status = "okay";
 	pinctrl-names = "default";
