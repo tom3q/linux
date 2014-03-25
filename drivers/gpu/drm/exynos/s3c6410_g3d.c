@@ -110,7 +110,6 @@
 /*
  * Request flags
  */
-#define G3D_REQUEST_UPDATE_STATE	(1 << 2)
 #define G3D_REQUEST_STRICT_SIZE_CHECK	(1 << 3)
 
 #define REQ_DATA(req)			((req) + 1)
@@ -152,11 +151,13 @@ struct g3d_drvdata {
 	struct clk *clock;
 	struct device *dev;
 	struct task_struct *thread;
-	struct mutex stall_mutex;
 
 	spinlock_t ready_lock;
 	struct list_head submit_list;
+	struct list_head retire_list;
 	wait_queue_head_t ready_wq;
+	wait_queue_head_t flush_wq;
+	wait_queue_head_t idle_wq;
 
 	atomic_t next_fence;
 	uint32_t submitted_fence;
@@ -597,10 +598,15 @@ static int g3d_wait_for_flush(struct g3d_drvdata *g3d, uint32_t mask, bool idle)
 
 	g3d_idle_irq_enable(g3d, mask);
 
-	ret = wait_event_interruptible_timeout(g3d->ready_wq,
-				g3d_pipeline_idle(g3d, mask)
-				|| (idle && !list_empty(&g3d->submit_list)),
-				msecs_to_jiffies(G3D_FLUSH_TIMEOUT));
+	if (idle)
+		ret = wait_event_interruptible_timeout(g3d->idle_wq,
+					g3d_pipeline_idle(g3d, mask)
+					|| !list_empty(&g3d->submit_list),
+					msecs_to_jiffies(G3D_FLUSH_TIMEOUT));
+	else
+		ret = wait_event_interruptible_timeout(g3d->flush_wq,
+					g3d_pipeline_idle(g3d, mask),
+					msecs_to_jiffies(G3D_FLUSH_TIMEOUT));
 
 	g3d_idle_irq_ack_and_disable(g3d);
 
@@ -613,7 +619,7 @@ static int g3d_wait_for_flush(struct g3d_drvdata *g3d, uint32_t mask, bool idle)
 		return ret;
 	}
 
-	dev_dbg_events(g3d->dev, "%s:%d ready_wq wake-up\n",
+	dev_dbg_events(g3d->dev, "%s:%d idle/flush_wq wake-up\n",
 			__func__, __LINE__);
 
 	return 0;
@@ -826,6 +832,15 @@ static inline void g3d_request_get(struct g3d_request *req)
 }
 
 /* State update */
+static void g3d_retire_requests(struct g3d_drvdata *g3d)
+{
+	struct g3d_request *req, *p;
+
+	list_for_each_entry_safe(req, p, &g3d->retire_list, list)
+		g3d_request_put(req);
+	INIT_LIST_HEAD(&g3d->retire_list);
+}
+
 static inline void g3d_state_mark_dirty(struct g3d_context *ctx,
 					unsigned int level)
 {
@@ -845,11 +860,7 @@ static void g3d_state_update(struct g3d_drvdata *g3d,
 static void g3d_state_restore(struct g3d_drvdata *g3d,
 					 struct g3d_context *ctx)
 {
-	struct g3d_request *req, *p;
-
-	list_for_each_entry_safe(req, p, &ctx->state_update_list, list)
-		g3d_request_put(req);
-
+	list_splice_tail(&ctx->state_update_list, &g3d->retire_list);
 	INIT_LIST_HEAD(&ctx->state_update_list);
 
 	g3d_restore_context(g3d, ctx);
@@ -858,21 +869,21 @@ static void g3d_state_restore(struct g3d_drvdata *g3d,
 static void g3d_state_apply(struct g3d_drvdata *g3d,
 				       struct g3d_context *ctx)
 {
-	struct g3d_request *req, *p;
+	struct g3d_request *req;
 
-	list_for_each_entry_safe(req, p, &ctx->state_update_list, list) {
+	list_for_each_entry(req, &ctx->state_update_list, list)
 		g3d_request_apply(g3d, req);
-		g3d_request_put(req);
-	}
 
+	list_splice_tail(&ctx->state_update_list, &g3d->retire_list);
 	INIT_LIST_HEAD(&ctx->state_update_list);
 }
 
-static void g3d_update_state(struct g3d_drvdata *g3d, struct g3d_context *ctx)
+static void g3d_prepare_draw(struct g3d_drvdata *g3d, struct g3d_context *ctx)
 {
 	int ret;
 	bool was_powered_down = false;
 
+	g3d_retire_requests(g3d);
 	g3d_state_update(g3d, ctx);
 
 	if (test_and_clear_bit(G3D_STATE_IDLE, &g3d->state)) {
@@ -1039,6 +1050,8 @@ static int g3d_handle_draw_buffer(struct g3d_drvdata *g3d,
 	size_t vertex_len = rdb->length & ~31;
 	const void *vertex_buf;
 
+	g3d_prepare_draw(g3d, req->ctx);
+
 	vertex_buf = db->obj->buffer->kvaddr + rdb->offset;
 
 	dev_dbg_reqs(g3d->dev, "%s (cnt = %u, len = %u)\n",
@@ -1051,7 +1064,7 @@ static int g3d_handle_draw_buffer(struct g3d_drvdata *g3d,
 	g3d_write(g3d, rdb->vertices, G3D_FGHI_FIFO_ENTRY_REG);
 	g3d_write(g3d, 0, G3D_FGHI_FIFO_ENTRY_REG);
 
-	g3d_request_put(req);
+	list_add_tail(&req->list, &g3d->retire_list);
 
 	return 0;
 }
@@ -1171,7 +1184,7 @@ static int g3d_process_shader_program(struct g3d_drvdata *g3d,
 
 	prev_req = ctx->shader_program[RSP_UNIT(rsp)];
 	if (prev_req)
-		g3d_request_put(prev_req);
+		list_add_tail(&prev_req->list, &g3d->retire_list);
 
 	if (!sp->obj) {
 		/* Shader detach request */
@@ -1436,7 +1449,7 @@ static int g3d_process_texture(struct g3d_drvdata *g3d,
 
 	prev_req = ctx->texture[TEX_UNIT(rts->flags)];
 	if (prev_req)
-		g3d_request_put(prev_req);
+		list_add_tail(&prev_req->list, &g3d->retire_list);
 
 	if (!tex->obj) {
 		/* Disable texture request */
@@ -1566,7 +1579,7 @@ static int g3d_process_colorbuffer(struct g3d_drvdata *g3d,
 	struct g3d_req_colorbuffer_setup *rcs = cb->req;
 
 	if (ctx->colorbuffer)
-		g3d_request_put(ctx->colorbuffer);
+		list_add_tail(&ctx->colorbuffer->list, &g3d->retire_list);
 
 	g3d_reg_cache_write_masked(ctx, rcs->fbctl, FGPF_FBCTL);
 	g3d_reg_cache_write_masked(ctx, rcs->offset, FGPF_CBADDR);
@@ -1680,7 +1693,7 @@ static int g3d_process_depthbuffer(struct g3d_drvdata *g3d,
 	struct g3d_req_depthbuffer_setup *rdb = db->req;
 
 	if (ctx->depthbuffer)
-		g3d_request_put(ctx->depthbuffer);
+		list_add_tail(&ctx->depthbuffer->list, &g3d->retire_list);
 
 	g3d_reg_cache_write(ctx, rdb->offset, FGPF_DBADDR);
 
@@ -1796,8 +1809,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 		.validate = g3d_validate_draw_buffer,
 		.free = g3d_free_draw_buffer,
 		.handle = g3d_handle_draw_buffer,
-		.flags = G3D_REQUEST_UPDATE_STATE |
-				G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
 		.length = sizeof(struct g3d_req_draw_buffer),
 		.priv_length = sizeof(struct g3d_draw_buffer),
 	},
@@ -1809,6 +1821,8 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_ALL_REQUESTS] = {
 
 static void g3d_do_idle(struct g3d_drvdata *g3d)
 {
+	g3d_retire_requests(g3d);
+
 	if (test_bit(G3D_STATE_IDLE, &g3d->state)) {
 		dev_dbg_events(g3d->dev, "%s (already disabled)\n", __func__);
 		return;
@@ -1952,14 +1966,10 @@ static int g3d_command_thread(void *data)
 	set_freezable();
 
 	while (!kthread_should_stop()) {
-		mutex_lock(&g3d->stall_mutex);
-
 		spin_lock(&g3d->ready_lock);
 
 		while (!g3d_get_next_request(g3d, &req)) {
 			spin_unlock(&g3d->ready_lock);
-
-			mutex_unlock(&g3d->stall_mutex);
 
 			g3d_do_idle(g3d);
 
@@ -1972,25 +1982,18 @@ static int g3d_command_thread(void *data)
 			dev_dbg_events(g3d->dev, "%s:%d ready_wq wake-up\n",
 					__func__, __LINE__);
 
-			mutex_lock(&g3d->stall_mutex);
-
 			spin_lock(&g3d->ready_lock);
 		}
 
-		req_info = &g3d_requests[REQ_TYPE(&req->header)];
-		ctx = req->ctx;
-
 		spin_unlock(&g3d->ready_lock);
 
-		if (req_info->flags & G3D_REQUEST_UPDATE_STATE)
-			g3d_update_state(g3d, ctx);
+		req_info = &g3d_requests[REQ_TYPE(&req->header)];
+		ctx = req->ctx;
 
 		ret = g3d_request_handle(g3d, req);
 		if (ret)
 			dev_err(g3d->dev, "request %p (type %d) failed\n",
 				req, REQ_TYPE(&req->header));
-
-		mutex_unlock(&g3d->stall_mutex);
 	}
 
 finish:
@@ -2006,9 +2009,10 @@ static irqreturn_t g3d_handle_irq(int irq, void *dev_id)
 
 	g3d_idle_irq_ack_and_disable(g3d);
 
-	dev_dbg_events(g3d->dev, "%s:%d waking up ready_wq\n",
+	dev_dbg_events(g3d->dev, "%s:%d waking up flush/idle_wq\n",
 			__func__, __LINE__);
-	wake_up_interruptible(&g3d->ready_wq);
+	wake_up_interruptible(&g3d->flush_wq);
+	wake_up_interruptible(&g3d->idle_wq);
 
 	return IRQ_HANDLED;
 }
@@ -2100,9 +2104,10 @@ static uint32_t g3d_post_requests(struct g3d_drvdata *g3d,
 	list_add_tail(&submit->list, &g3d->submit_list);
 
 	if (wake) {
-		dev_dbg_events(g3d->dev, "%s:%d waking up ready_wq\n",
+		dev_dbg_events(g3d->dev, "%s:%d waking up ready/idle_wq\n",
 			__func__, __LINE__);
 		wake_up_interruptible_sync(&g3d->ready_wq);
+		wake_up_interruptible_sync(&g3d->idle_wq);
 	}
 
 	spin_unlock(&g3d->ready_lock);
@@ -2475,8 +2480,10 @@ static int g3d_probe(struct platform_device *pdev)
 	g3d->dev = &pdev->dev;
 	spin_lock_init(&g3d->ready_lock);
 	INIT_LIST_HEAD(&g3d->submit_list);
+	INIT_LIST_HEAD(&g3d->retire_list);
 	init_waitqueue_head(&g3d->ready_wq);
-	mutex_init(&g3d->stall_mutex);
+	init_waitqueue_head(&g3d->flush_wq);
+	init_waitqueue_head(&g3d->idle_wq);
 	init_waitqueue_head(&g3d->fence_wq);
 	atomic_set(&g3d->next_fence, 0);
 
