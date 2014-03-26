@@ -715,22 +715,6 @@ static struct exynos_drm_gem_obj *exynos_drm_gem_lookup(struct drm_device *dev,
 	return to_exynos_gem_obj(base);
 }
 
-static void exynos_drm_gem_sync_for_device(struct drm_device *drm_dev,
-					   struct exynos_drm_gem_obj *obj,
-					   enum dma_data_direction dir)
-{
-	dma_sync_single_for_device(drm_dev->dev,
-					obj->buffer->dma_addr, obj->size, dir);
-}
-
-static void exynos_drm_gem_sync_for_cpu(struct drm_device *drm_dev,
-					struct exynos_drm_gem_obj *obj,
-					enum dma_data_direction dir)
-{
-	dma_sync_single_for_cpu(drm_dev->dev,
-					obj->buffer->dma_addr, obj->size, dir);
-}
-
 static int g3d_prepare_gem_object(struct g3d_drvdata *g3d,
 				  struct exynos_drm_gem_obj *obj)
 {
@@ -962,8 +946,8 @@ static int g3d_process_state_buffer(struct g3d_drvdata *g3d,
 
 	if (max_reg < FGPE_VERTEX_CONTEXT)
 		dirty_level = G3D_FLUSH_VERTEX_FIFO;
-	if (max_reg < FGRA_PIX_SAMP)
-		dirty_level = G3D_FLUSH_TRIANGLE_SETUP;
+	else if (max_reg < FGRA_PIX_SAMP)
+		dirty_level = G3D_FLUSH_PRIMITIVE;
 	else if (max_reg < FGPF_ALPHAT)
 		dirty_level = G3D_FLUSH_RASTER;
 	else
@@ -1415,12 +1399,8 @@ static int g3d_validate_texture(struct g3d_drvdata *g3d,
 	/* TODO: do some checks */
 	rts->base_offset += tex->obj->buffer->dma_addr;
 
-	if (rts->flags & G3D_TEXTURE_DIRTY) {
-		exynos_drm_gem_sync_for_device(req->ctx->drm_dev,
-						tex->obj, DMA_TO_DEVICE);
-
+	if (rts->flags & G3D_TEXTURE_DIRTY)
 		tex->obj->g3d_priv->tex_timestamp = g3d->tex_timestamp;
-	}
 
 	return 0;
 
@@ -1530,12 +1510,8 @@ static int g3d_validate_colorbuffer(struct g3d_drvdata *g3d,
 	if (ret)
 		goto err_cobj;
 
-	if (rcs->flags & G3D_CBUFFER_DIRTY) {
-		exynos_drm_gem_sync_for_device(req->ctx->drm_dev,
-						cb->obj, DMA_BIDIRECTIONAL);
-
+	if (rcs->flags & G3D_CBUFFER_DIRTY)
 		cb->obj->g3d_priv->fb_timestamp = g3d->fb_timestamp;
-	}
 
 	/* TODO: do some checks */
 	rcs->offset += cb->obj->buffer->dma_addr;
@@ -1553,11 +1529,8 @@ static void g3d_free_colorbuffer(struct g3d_drvdata *g3d,
 {
 	struct g3d_colorbuffer *cb = req_data(req);
 
-	if (cb->obj) {
-		exynos_drm_gem_sync_for_cpu(req->ctx->drm_dev,
-						cb->obj, DMA_BIDIRECTIONAL);
+	if (cb->obj)
 		drm_gem_object_unreference_unlocked(&cb->obj->base);
-	}
 }
 
 static void g3d_flush_colorbuffer(struct g3d_drvdata *g3d,
@@ -1644,12 +1617,8 @@ static int g3d_validate_depthbuffer(struct g3d_drvdata *g3d,
 	if (ret)
 		goto err_cobj;
 
-	if (rdb->flags & G3D_DBUFFER_DIRTY) {
-		exynos_drm_gem_sync_for_device(req->ctx->drm_dev,
-						db->obj, DMA_BIDIRECTIONAL);
-
+	if (rdb->flags & G3D_DBUFFER_DIRTY)
 		db->obj->g3d_priv->fb_timestamp = g3d->fb_timestamp;
-	}
 
 	/* TODO: do some checks */
 	rdb->offset += db->obj->buffer->dma_addr;
@@ -1667,11 +1636,8 @@ static void g3d_free_depthbuffer(struct g3d_drvdata *g3d,
 {
 	struct g3d_depthbuffer *db = req_data(req);
 
-	if (db->obj) {
-		exynos_drm_gem_sync_for_cpu(req->ctx->drm_dev,
-						db->obj, DMA_BIDIRECTIONAL);
+	if (db->obj)
 		drm_gem_object_unreference_unlocked(&db->obj->base);
-	}
 }
 
 static void g3d_flush_depthbuffer(struct g3d_drvdata *g3d,
