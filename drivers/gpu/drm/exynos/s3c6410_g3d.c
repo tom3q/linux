@@ -366,6 +366,7 @@ struct g3d_drvdata {
 	struct clk *clock;
 	struct device *dev;
 	struct task_struct *thread;
+	uint32_t version;
 
 	spinlock_t ready_lock;
 	struct list_head submit_list;
@@ -586,9 +587,8 @@ static const uint32_t g3d_registers[G3D_NUM_REGISTERS] = {
 static const struct g3d_request_info g3d_requests[];
 
 /*
- * Register accessors
+ * Debugging helpers
  */
-#ifdef DEBUG
 
 #define DEBUG_TRACE		(1 << 0)
 #define DEBUG_EVENTS		(1 << 1)
@@ -601,8 +601,7 @@ static const struct g3d_request_info g3d_requests[];
 #define DEBUG_IO		(1 << 30)
 #define DEBUG_HW_WATCHPOINTS	(1 << 31)
 
-static unsigned int s3c6410_g3d_debug_mask;
-module_param(s3c6410_g3d_debug_mask, uint, 0644);
+#ifdef DEBUG
 
 #define dev_dbg_mask(mask, ...)				\
 	do {						\
@@ -610,13 +609,8 @@ module_param(s3c6410_g3d_debug_mask, uint, 0644);
 			dev_dbg(__VA_ARGS__);		\
 	} while (0)
 
-#define dev_dbg_trace(...)	dev_dbg_mask(DEBUG_TRACE, __VA_ARGS__)
-#define dev_dbg_events(...)	dev_dbg_mask(DEBUG_EVENTS, __VA_ARGS__)
-#define dev_dbg_pipe(...)	dev_dbg_mask(DEBUG_PIPE, __VA_ARGS__)
-#define dev_dbg_fops(...)	dev_dbg_mask(DEBUG_FOPS, __VA_ARGS__)
-#define dev_dbg_ctx(...)	dev_dbg_mask(DEBUG_CTX, __VA_ARGS__)
-#define dev_dbg_reqs(...)	dev_dbg_mask(DEBUG_REQS, __VA_ARGS__)
-#define dev_dbg_io(...)		dev_dbg_mask(DEBUG_IO, __VA_ARGS__)
+static unsigned int s3c6410_g3d_debug_mask;
+module_param(s3c6410_g3d_debug_mask, uint, 0644);
 
 static inline void g3d_assert_enabled(struct g3d_drvdata *g3d)
 {
@@ -638,13 +632,11 @@ static void g3d_dump_req_data(const void *buf, size_t len)
 }
 #else /* !DEBUG */
 
-#define dev_dbg_trace(...)
-#define dev_dbg_events(...)
-#define dev_dbg_pipe(...)
-#define dev_dbg_fops(...)
-#define dev_dbg_ctx(...)
-#define dev_dbg_reqs(...)
-#define dev_dbg_io(...)
+#define dev_dbg_mask(mask, ...)				\
+	do {						\
+		if (0)	\
+			dev_dbg(__VA_ARGS__);		\
+	} while (0)
 
 static inline void g3d_assert_enabled(struct g3d_drvdata *g3d) {}
 static inline void g3d_dump_draw_buffer(const void *buf, size_t len) {}
@@ -652,6 +644,17 @@ static inline void g3d_dump_req_data(const void *buf, size_t len) {}
 
 #endif /* DEBUG */
 
+#define dev_dbg_trace(...)	dev_dbg_mask(DEBUG_TRACE, __VA_ARGS__)
+#define dev_dbg_events(...)	dev_dbg_mask(DEBUG_EVENTS, __VA_ARGS__)
+#define dev_dbg_pipe(...)	dev_dbg_mask(DEBUG_PIPE, __VA_ARGS__)
+#define dev_dbg_fops(...)	dev_dbg_mask(DEBUG_FOPS, __VA_ARGS__)
+#define dev_dbg_ctx(...)	dev_dbg_mask(DEBUG_CTX, __VA_ARGS__)
+#define dev_dbg_reqs(...)	dev_dbg_mask(DEBUG_REQS, __VA_ARGS__)
+#define dev_dbg_io(...)		dev_dbg_mask(DEBUG_IO, __VA_ARGS__)
+
+/*
+ * Register accessors
+ */
 static inline void g3d_write_relaxed(struct g3d_drvdata *g3d,
 				     uint32_t val, uint32_t reg)
 {
@@ -839,10 +842,15 @@ static int g3d_flush_pipeline(struct g3d_drvdata *g3d,
 
 	dev_dbg_trace(g3d->dev, "%s (mask = %08x)\n", __func__, mask);
 
-	while (timeout--) {
+	if (level > G3D_FLUSH_VERTEX_CACHE) {
 		if (g3d_pipeline_idle(g3d, mask))
 			return 0;
-		udelay(1);
+	} else {
+		while (timeout--) {
+			if (g3d_pipeline_idle(g3d, mask))
+				return 0;
+			udelay(1);
+		}
 	}
 
 	return g3d_wait_for_flush(g3d, mask, idle);
@@ -1215,6 +1223,17 @@ static struct exynos_drm_gem_obj *g3d_lookup_gem(struct g3d_submit *submit,
 	return obj;
 }
 
+static struct exynos_drm_gem_obj *
+g3d_lookup_gem_noref(struct g3d_submit *submit, uint32_t sid)
+{
+	struct exynos_drm_gem_obj *obj;
+
+	obj = idr_find(&submit->gem_idr, sid);
+	BUG_ON(!obj);
+
+	return obj;
+}
+
 /* Draw request */
 static int g3d_validate_draw_buffer(struct g3d_submit *submit, uint32_t *req)
 {
@@ -1289,7 +1308,7 @@ static void g3d_handle_draw_buffer(struct g3d_submit *submit,
 	handle = req[G3D_DRAW_IB_HANDLE];
 	offset = req[G3D_DRAW_IB_OFFSET];
 
-	obj = g3d_lookup_gem(submit, handle);
+	obj = g3d_lookup_gem_noref(submit, handle);
 	data = obj->buffer->kvaddr + offset;
 
 	g3d_write_relaxed(g3d, 0x83000019, G3D_FGHI_CONTROL_REG);
@@ -1297,9 +1316,8 @@ static void g3d_handle_draw_buffer(struct g3d_submit *submit,
 	g3d_write(g3d, num_vertices, G3D_FGHI_FIFO_ENTRY_REG);
 
 	num_vertices = ALIGN(num_vertices, 4);
+	g3d_dump_draw_buffer(data, num_vertices);
 	g3d_write_burst(g3d, G3D_FGHI_FIFO_ENTRY_REG, data, num_vertices);
-
-	drm_gem_object_unreference_unlocked(&obj->base);
 }
 
 /* Vertex buffer upload request */
@@ -1317,7 +1335,7 @@ static int g3d_validate_vertex_buffer(struct g3d_submit *submit, uint32_t *req)
 	dst_offset = req[G3D_VERTEX_BUF_DST_OFFSET];
 	length = req[G3D_VERTEX_BUF_LENGTH];
 
-	if (unlikely(dst_offset % 16 || length % 16)) {
+	if (unlikely(dst_offset % 4 || length % 4)) {
 		dev_err(g3d->dev, "unaligned vertex buffer access\n");
 		return -EINVAL;
 	}
@@ -1361,6 +1379,7 @@ static void g3d_handle_vertex_buffer(struct g3d_submit *submit,
 	struct g3d_context *ctx = submit->ctx;
 	struct g3d_drvdata *g3d = ctx->g3d;
 	struct exynos_drm_gem_obj *obj;
+	unsigned int leading, trailing;
 	const uint32_t *data;
 
 	g3d_state_mark_dirty(ctx, G3D_FLUSH_VERTEX_FIFO);
@@ -1373,16 +1392,22 @@ static void g3d_handle_vertex_buffer(struct g3d_submit *submit,
 	dst_offset = req[G3D_VERTEX_BUF_DST_OFFSET];
 	length = req[G3D_VERTEX_BUF_LENGTH];
 
-	obj = g3d_lookup_gem(submit, handle);
+	obj = g3d_lookup_gem_noref(submit, handle);
 	data = obj->buffer->kvaddr + offset;
 
 	dev_dbg_reqs(g3d->dev, "%s (len = %u)\n", __func__, length);
 	g3d_dump_draw_buffer(data, length);
 
-	g3d_write(g3d, dst_offset, G3D_FGHI_VBADDR_REG);
-	g3d_write_burst(g3d, G3D_FGHI_VB_ENTRY_REG, data, length);
+	leading = (dst_offset % 16) / 4;
+	trailing = (4 - ((length + dst_offset) % 16) / 4) % 4;
 
-	drm_gem_object_unreference_unlocked(&obj->base);
+	g3d_write(g3d, dst_offset & ~0xf, G3D_FGHI_VBADDR_REG);
+
+	while (leading--)
+		g3d_write_relaxed(g3d, 0, G3D_FGHI_VB_ENTRY_REG);
+	g3d_write_burst(g3d, G3D_FGHI_VB_ENTRY_REG, data, length);
+	while (trailing--)
+		g3d_write_relaxed(g3d, 0, G3D_FGHI_VB_ENTRY_REG);
 }
 
 /* Shader program update request */
@@ -2750,7 +2775,6 @@ static int g3d_probe(struct platform_device *pdev)
 	struct exynos_drm_subdrv *subdrv;
 	struct g3d_drvdata *g3d;
 	struct resource *res;
-	uint32_t version;
 	int ret;
 
 	g3d = devm_kzalloc(&pdev->dev, sizeof(*g3d), GFP_KERNEL);
@@ -2809,11 +2833,12 @@ static int g3d_probe(struct platform_device *pdev)
 	pm_runtime_get_sync(&pdev->dev);
 
 	clk_prepare_enable(g3d->clock);
-	version = g3d_read(g3d, G3D_FGGB_VERSION);
+	g3d->version = g3d_read(g3d, G3D_FGGB_VERSION);
 	clk_disable_unprepare(g3d->clock);
 
 	dev_info(&pdev->dev, "detected FIMG-3DSE version %d.%d.%d\n",
-		version >> 24, (version >> 16) & 0xff, (version >> 8) & 0xff);
+			g3d->version >> 24, (g3d->version >> 16) & 0xff,
+			(g3d->version >> 8) & 0xff);
 
 	pm_runtime_put_sync(&pdev->dev);
 	set_bit(G3D_STATE_IDLE, &g3d->state);
