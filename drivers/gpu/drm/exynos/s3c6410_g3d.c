@@ -49,6 +49,11 @@
 #include "exynos_drm_drv.h"
 #include "exynos_drm_gem.h"
 
+#ifndef __CHECKER__
+#define CREATE_TRACE_POINTS
+#include "s3c6410_g3d_trace.h"
+#endif
+
 /*
  * Various definitions
  */
@@ -382,6 +387,7 @@ struct g3d_drvdata {
 	uint32_t submitted_fence;
 	uint32_t completed_fence;
 	wait_queue_head_t fence_wq;
+	uint32_t num_draws;
 
 	struct g3d_context *last_ctx;
 
@@ -847,8 +853,10 @@ static int g3d_flush_pipeline(struct g3d_drvdata *g3d,
 
 	dev_dbg_trace(g3d->dev, "%s (mask = %08x)\n", __func__, mask);
 
-	if (g3d_pipeline_idle(g3d, mask))
+	if (g3d_pipeline_idle(g3d, mask)) {
+		trace_g3d_draw_complete(g3d->num_draws);
 		return 0;
+	}
 
 	ret = g3d_wait_for_flush(g3d, mask, idle);
 	if (ret < 0)
@@ -1322,6 +1330,8 @@ static int g3d_handle_draw_buffer(struct g3d_submit *submit,
 	num_vertices = req[G3D_DRAW_VERTICES];
 
 	dev_dbg_reqs(g3d->dev, "%s (cnt = %u)\n", __func__, num_vertices);
+
+	trace_g3d_draw_request(++g3d->num_draws);
 
 	if (!(req[G3D_DRAW_CONTROL] & G3D_DRAW_INDEXED)) {
 		g3d_write_relaxed(g3d, 0x80010009, G3D_FGHI_CONTROL_REG);
@@ -2306,27 +2316,31 @@ static int g3d_wait_interruptible_timeout(struct g3d_drvdata *g3d,
 	timeout_jiffies = timespec_to_jiffies(timeout);
 	start_jiffies = jiffies;
 
+	trace_g3d_fence_wait_request(fence);
+
 	if (!timeout_jiffies) {
-		return wait_event_interruptible(g3d->fence_wq,
+		ret = wait_event_interruptible(g3d->fence_wq,
 						fence_completed(g3d, fence));
-	}
+	} else {
+		if (time_after(start_jiffies, timeout_jiffies))
+			remaining_jiffies = 0;
+		else
+			remaining_jiffies = timeout_jiffies - start_jiffies;
 
-	if (time_after(start_jiffies, timeout_jiffies))
-		remaining_jiffies = 0;
-	else
-		remaining_jiffies = timeout_jiffies - start_jiffies;
-
-	ret = wait_event_interruptible_timeout(g3d->fence_wq,
+		ret = wait_event_interruptible_timeout(g3d->fence_wq,
 						fence_completed(g3d, fence),
 						remaining_jiffies);
-	if (ret == 0) {
-		dev_dbg_events(g3d->dev,
-			"timeout waiting for fence: %u (completed: %u)",
-			fence, g3d->completed_fence);
-		ret = -ETIMEDOUT;
-	} else if (ret > 0) {
-		ret = 0;
+		if (ret == 0) {
+			dev_dbg_events(g3d->dev,
+				"timeout waiting for fence: %u (completed: %u)",
+				fence, g3d->completed_fence);
+			ret = -ETIMEDOUT;
+		} else if (ret > 0) {
+			ret = 0;
+		}
 	}
+
+	trace_g3d_fence_wait_complete(fence, ret);
 
 	return ret;
 }
@@ -2372,6 +2386,8 @@ static void g3d_process_submit(struct g3d_drvdata *g3d,
 	submit->state_update_start = submit->cur;
 	submit->apply_start = submit->cur;
 
+	trace_g3d_gpu_request(submit->fence);
+
 	while (submit->cur < submit->end) {
 		if (test_bit(G3D_CONTEXT_ABORTED, &ctx->state))
 			break;
@@ -2386,6 +2402,9 @@ static void g3d_process_submit(struct g3d_drvdata *g3d,
 
 	g3d_flush_pipeline(g3d, G3D_FLUSH_COLOR_CACHE, false);
 	g3d_flush_caches(g3d);
+
+	trace_g3d_gpu_complete(submit->fence);
+
 	g3d_signal_fence(g3d, submit->fence);
 
 	g3d_release_submit(submit);
