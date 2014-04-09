@@ -274,12 +274,20 @@ void s3c_pm_configure_extint(void)
 
 void s3c_pm_restore_core(void)
 {
+	u32 tmp;
+
 	__raw_writel(0, S3C64XX_EINT_MASK);
 
 	s3c_pm_debug_smdkled(1 << 2, 0);
 
 	s3c_pm_do_restore_core(core_save, ARRAY_SIZE(core_save));
 	s3c_pm_do_restore(misc_save, ARRAY_SIZE(misc_save));
+
+	/* Setup PWRCFG to enter idle mode */
+	tmp = __raw_readl(S3C64XX_PWR_CFG);
+	tmp &= ~S3C64XX_PWRCFG_CFG_WFI_MASK;
+	tmp |= S3C64XX_PWRCFG_CFG_WFI_IDLE;
+	__raw_writel(tmp, S3C64XX_PWR_CFG);
 }
 
 void s3c_pm_save_core(void)
@@ -387,6 +395,8 @@ int __init s3c64xx_pm_init(void)
 
 static __init int s3c64xx_pm_initcall(void)
 {
+	u32 tmp;
+
 	pm_cpu_prep = s3c64xx_pm_prepare;
 	pm_cpu_sleep = s3c64xx_cpu_suspend;
 
@@ -400,6 +410,12 @@ static __init int s3c64xx_pm_initcall(void)
 	gpio_direction_output(S3C64XX_GPN(14), 0);
 	gpio_direction_output(S3C64XX_GPN(15), 0);
 #endif
+
+	/* Setup PWRCFG to enter idle mode */
+	tmp = __raw_readl(S3C64XX_PWR_CFG);
+	tmp &= ~S3C64XX_PWRCFG_CFG_WFI_MASK;
+	tmp |= S3C64XX_PWRCFG_CFG_WFI_IDLE;
+	__raw_writel(tmp, S3C64XX_PWR_CFG);
 
 	return 0;
 }
