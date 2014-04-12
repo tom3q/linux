@@ -47,6 +47,16 @@
 		power-domains = <&clocks DOMAIN_G>;
 	};
 
+	g2d: gpu@76100000 {
+		compatible = "samsung,s3c6410-g2d";
+		reg = <0x76100000 0x1000>;
+		interrupt-parent = <&vic0>;
+		interrupts = <11>;
+		clock-names = "bus-clk";
+		clocks = <&clocks HCLK_2D>;
+		power-domains = <&clocks DOMAIN_P>;
+	};
+
 	usb_phy: phy@7c100000 {
 		compatible = "samsung,s3c6410-usb-phy";
 		reg = <0x7c100000 0x1000>;
