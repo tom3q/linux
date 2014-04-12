@@ -121,3 +121,26 @@ config DRM_EXYNOS_S3C6410_G3D_DEBUG
 	  options available in G3D driver. Control over enabling of particular
 	  features is provided by debug_mask sysfs attribute. By default
 	  all options are disabled.
+
+config DRM_EXYNOS_S3C6410_G2D
+	bool "Exynos DRM support for S3C6410 G2D"
+	depends on DRM_EXYNOS
+	help
+	  Choose this option if you want to use S3C6410 G2D with DRM.
+
+config DRM_EXYNOS_S3C6410_G2D_ALWAYS_ON
+	bool "Keep G2D powered on for debugging purposes"
+	depends on DRM_EXYNOS_S3C6410_G2D
+	help
+	  Choose this option to disable power management in the driver,
+	  so the GPU is kept powered on all the time. This is useful for
+	  accessing the hardware from userspace tools.
+
+config DRM_EXYNOS_S3C6410_G2D_DEBUG
+	bool "Enable debugging features of G2D driver"
+	depends on DRM_EXYNOS_S3C6410_G2D
+	help
+	  Select this option to compile in support for various debugging
+	  options available in G2D driver. Control over enabling of particular
+	  features is provided by debug_mask sysfs attribute. By default
+	  all options are disabled.
