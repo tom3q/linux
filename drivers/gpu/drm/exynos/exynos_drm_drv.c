@@ -32,6 +32,7 @@
 #include "exynos_drm_ipp.h"
 #include "exynos_drm_iommu.h"
 #include "s3c6410_g3d.h"
+#include "s3c6410_g2d.h"
 
 #define DRIVER_NAME	"exynos"
 #define DRIVER_DESC	"Samsung SoC DRM"
@@ -308,6 +309,16 @@ static const struct drm_ioctl_desc exynos_ioctls[] = {
 			s3c6410_g3d_cpu_prep, DRM_UNLOCKED | DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(EXYNOS_G3D_CPU_FINI,
 			s3c6410_g3d_cpu_fini, DRM_UNLOCKED | DRM_AUTH),
+#endif
+#ifdef CONFIG_DRM_EXYNOS_S3C6410_G2D
+	DRM_IOCTL_DEF_DRV(EXYNOS_G2D_CREATE_PIPE,
+			s3c6410_g2d_create_pipe, DRM_UNLOCKED | DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(EXYNOS_G2D_DESTROY_PIPE,
+			s3c6410_g2d_destroy_pipe, DRM_UNLOCKED | DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(EXYNOS_G2D_SUBMIT,
+			s3c6410_g2d_submit, DRM_UNLOCKED | DRM_AUTH),
+	DRM_IOCTL_DEF_DRV(EXYNOS_G2D_WAIT,
+			s3c6410_g2d_wait, DRM_UNLOCKED | DRM_AUTH),
 #endif
 };
 
@@ -633,6 +644,12 @@ static int exynos_drm_platform_probe(struct platform_device *pdev)
 		goto out_s3c6410_g3d;
 #endif
 
+#ifdef CONFIG_DRM_EXYNOS_S3C6410_G2D
+	ret = platform_driver_register(&s3c6410_g2d_driver);
+	if (ret < 0)
+		goto out_s3c6410_g2d;
+#endif
+
 	match = exynos_drm_match_add(&pdev->dev);
 	if (IS_ERR(match)) {
 		ret = PTR_ERR(match);
@@ -647,6 +664,11 @@ static int exynos_drm_platform_probe(struct platform_device *pdev)
 	return ret;
 
 err_unregister_resources:
+
+#ifdef CONFIG_DRM_EXYNOS_S3C6410_G2D
+	platform_driver_unregister(&s3c6410_g2d_driver);
+out_s3c6410_g2d:
+#endif
 
 #ifdef CONFIG_DRM_EXYNOS_S3C6410_G3D
 	platform_driver_unregister(&s3c6410_g3d_driver);
@@ -705,6 +727,10 @@ err_unregister_fimd_drv:
 
 static int exynos_drm_platform_remove(struct platform_device *pdev)
 {
+
+#ifdef CONFIG_DRM_EXYNOS_S3C6410_G2D
+	platform_driver_unregister(&s3c6410_g2d_driver);
+#endif
 
 #ifdef CONFIG_DRM_EXYNOS_S3C6410_G3D
 	platform_driver_unregister(&s3c6410_g3d_driver);
