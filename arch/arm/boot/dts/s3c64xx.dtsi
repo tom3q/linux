@@ -97,6 +97,18 @@
 			status = "disabled";
 		};
 
+		hsotg: usb-otg@7c000000 {
+			compatible = "samsung,s3c6400-hsotg";
+			reg = <0x7c000000 0x10000>;
+			interrupt-parent = <&vic1>;
+			interrupts = <26>;
+			clock-names = "otg";
+			clocks = <&clocks HCLK_USB>;
+			phy-names = "usb2-phy";
+			phys = <&usb_phy 0>;
+			status = "disabled";
+		};
+
 		sdhci0: sdhci@7c200000 {
 			compatible = "samsung,s3c6410-sdhci";
 			reg = <0x7c200000 0x100>;
