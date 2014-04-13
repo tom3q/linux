@@ -232,6 +232,16 @@ config PHY_ST_SPEAR1340_MIPHY
 	help
 	  Support for ST SPEAr1340 MIPHY which can be used for PCIe and SATA.
 
+config PHY_S3C64XX_USB
+	bool "Support for S3C6400/S3C6410"
+	depends on PHY_SAMSUNG_USB2
+	depends on ARCH_S3C64XX
+	help
+	  Enable USB PHY support for S3C64XX SoCs. This option requires that
+	  Samsung USB 2.0 PHY driver is enabled and means that support for this
+	  particular SoC is compiled in the driver. In case of S3C64XX three
+	  phys are available - device, host0 and host1.
+
 config PHY_XGENE
 	tristate "APM X-Gene 15Gbps PHY support"
 	depends on HAS_IOMEM && OF && (ARM64 || COMPILE_TEST)
