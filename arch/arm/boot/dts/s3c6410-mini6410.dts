@@ -143,6 +143,24 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pwm0_out>;
 	};
+
+	fixed-regulators {
+		compatible = "simple-bus";
+
+		vusb_a_reg: regulator-vusb-d {
+			compatible = "regulator-fixed";
+			regulator-name = "VDD_OTG";
+			regulator-min-voltage = <3300000>;
+			regulator-max-voltage = <3300000>;
+		};
+
+		vusb_d_reg: regulator-vusb-a {
+			compatible = "regulator-fixed";
+			regulator-name = "VDD_OTGI";
+			regulator-min-voltage = <1200000>;
+			regulator-max-voltage = <1200000>;
+		};
+	};
 };
 
 &fin_pll {
@@ -181,6 +199,16 @@
 			pixelclk-active = <0>;
 		};
 	};
+};
+
+&usb_phy {
+	status = "okay";
+};
+
+&hsotg {
+	vusb_a-supply = <&vusb_a_reg>;
+	vusb_d-supply = <&vusb_d_reg>;
+	status = "okay";
 };
 
 &sdhci0 {
