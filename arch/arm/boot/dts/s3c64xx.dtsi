@@ -41,6 +41,30 @@
 		};
 	};
 
+	clocks {
+		compatible = "simple-bus";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		fin_pll: oscillator@0 {
+			compatible = "fixed-clock";
+			reg = <0>;
+			clock-output-names = "fin_pll";
+			clock-frequency = <0>;
+			#clock-cells = <0>;
+			status = "disabled";
+		};
+
+		xusbxti: oscillator@1 {
+			compatible = "fixed-clock";
+			reg = <1>;
+			clock-output-names = "xusbxti";
+			clock-frequency = <0>;
+			#clock-cells = <0>;
+			status = "disabled";
+		};
+	};
+
 	soc: soc {
 		compatible = "simple-bus";
 		#address-cells = <1>;
