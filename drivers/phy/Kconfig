@@ -171,6 +171,16 @@ config PHY_EXYNOS5_USBDRD
 	  This driver provides PHY interface for USB 3.0 DRD controller
 	  present on Exynos5 SoC series.
 
+config PHY_S3C64XX_USB
+	bool "Support for S3C6400/S3C6410"
+	depends on PHY_SAMSUNG_USB2
+	depends on ARCH_S3C64XX
+	help
+	  Enable USB PHY support for S3C64XX SoCs. This option requires that
+	  Samsung USB 2.0 PHY driver is enabled and means that support for this
+	  particular SoC is compiled in the driver. In case of S3C64XX three
+	  phys are available - device, host0 and host1.
+
 config PHY_XGENE
 	tristate "APM X-Gene 15Gbps PHY support"
 	depends on HAS_IOMEM && OF && (ARM64 || COMPILE_TEST)
