@@ -23,6 +23,8 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of.h>
+#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/usb-ohci-s3c2410.h>
 #include <linux/usb.h>
@@ -42,6 +44,8 @@ static const char hcd_name[] = "ohci-s3c2410";
 
 static struct clk *clk;
 static struct clk *usb_clk;
+static struct phy *phy[2];
+static const char *phy_names[2] = { "port0", "port1" };
 
 /* forward definitions */
 
@@ -334,9 +338,18 @@ static void s3c2410_hcd_oc(struct s3c2410_hcd_info *info, int port_oc)
 static void
 usb_hcd_s3c2410_remove(struct usb_hcd *hcd, struct platform_device *dev)
 {
+	int port;
+
 	usb_remove_hcd(hcd);
 	s3c2410_stop_hc(dev);
 	usb_put_hcd(hcd);
+
+	for (port = 0; port < 2; ++port) {
+		if (!IS_ERR(phy[port])) {
+			phy_power_off(phy[port]);
+			phy_exit(phy[port]);
+		}
+	}
 }
 
 /**
@@ -354,6 +367,7 @@ static int usb_hcd_s3c2410_probe(const struct hc_driver *driver,
 	struct usb_hcd *hcd = NULL;
 	struct s3c2410_hcd_info *info = dev_get_platdata(&dev->dev);
 	int retval;
+	int port;
 
 	s3c2410_usb_set_power(info, 1, 1);
 	s3c2410_usb_set_power(info, 2, 1);
@@ -385,16 +399,30 @@ static int usb_hcd_s3c2410_probe(const struct hc_driver *driver,
 		goto err_put;
 	}
 
+	for (port = 0; port < 2; ++port) {
+		phy[port] = devm_phy_get(&dev->dev, phy_names[port]);
+		if (!IS_ERR(phy[port])) {
+			phy_init(phy[port]);
+			phy_power_on(phy[port]);
+		}
+	}
+
 	s3c2410_start_hc(dev, hcd);
 
 	retval = usb_add_hcd(hcd, dev->resource[1].start, 0);
 	if (retval != 0)
-		goto err_ioremap;
+		goto err_phy;
 
 	device_wakeup_enable(hcd->self.controller);
 	return 0;
 
- err_ioremap:
+ err_phy:
+	for (port = 0; port < 2; ++port) {
+		if (!IS_ERR(phy[port])) {
+			phy_power_off(phy[port]);
+			phy_exit(phy[port]);
+		}
+	}
 	s3c2410_stop_hc(dev);
 
  err_put:
@@ -457,6 +485,13 @@ static const struct dev_pm_ops ohci_hcd_s3c2410_pm_ops = {
 	.resume		= ohci_hcd_s3c2410_drv_resume,
 };
 
+#ifdef CONFIG_OF
+static const struct of_device_id ohci_s3c2410_of_match[] = {
+	{ .compatible = "samsung,s3c2410-ohci", },
+	{ /* sentinel */ }
+};
+#endif
+
 static struct platform_driver ohci_hcd_s3c2410_driver = {
 	.probe		= ohci_hcd_s3c2410_drv_probe,
 	.remove		= ohci_hcd_s3c2410_drv_remove,
@@ -465,6 +500,7 @@ static struct platform_driver ohci_hcd_s3c2410_driver = {
 		.owner	= THIS_MODULE,
 		.name	= "s3c2410-ohci",
 		.pm	= &ohci_hcd_s3c2410_pm_ops,
+		.of_match_table = of_match_ptr(ohci_s3c2410_of_match),
 	},
 };
 
