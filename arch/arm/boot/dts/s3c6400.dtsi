@@ -33,10 +33,28 @@
 };
 
 &soc {
+	usb_phy: phy@7c100000 {
+		compatible = "samsung,s3c6400-usb-phy";
+		reg = <0x7c100000 0x1000>;
+		clock-names = "phy", "ref";
+		clocks = <&clocks HCLK_USB>, <&xusbxti>;
+		samsung,pmureg-phandle = <&syscon>;
+		#phy-cells = <1>;
+		status = "disabled";
+	};
+
 	clocks: clock-controller@7e00f000 {
-		compatible = "samsung,s3c6400-clock";
+		compatible = "samsung,s3c6400-clock", "simple-bus";
 		reg = <0x7e00f000 0x1000>;
 		#clock-cells = <1>;
 		#power-domain-cells = <1>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		syscon: system-controller@7e00f000 {
+			compatible = "syscon";
+			reg = <0x7e00f000 0x1000>;
+		};
 	};
 };
