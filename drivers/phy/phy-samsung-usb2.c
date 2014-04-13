@@ -111,6 +111,15 @@ static const struct of_device_id samsung_usb2_phy_of_match[] = {
 		.data = &exynos5250_usb2_phy_config,
 	},
 #endif
+#ifdef CONFIG_PHY_S3C64XX_USB
+	{
+		.compatible = "samsung,s3c6400-usb-phy",
+		.data = &s3c64xx_usb_phy_config,
+	}, {
+		.compatible = "samsung,s3c6410-usb-phy",
+		.data = &s3c64xx_usb_phy_config,
+	},
+#endif
 #ifdef CONFIG_PHY_S5PV210_USB2
 	{
 		.compatible = "samsung,s5pv210-usb2-phy",
