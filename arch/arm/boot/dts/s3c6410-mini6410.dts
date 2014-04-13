@@ -173,6 +173,12 @@
 	status = "okay";
 };
 
+&ohci {
+	phy-names = "port1";
+	phys = <&usb_phy 2>;
+	status = "okay";
+};
+
 &usb_phy {
 	status = "okay";
 };
