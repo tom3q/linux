@@ -1,0 +1,664 @@
+/*
+ * Samsung's S5P6442 SoC device tree source
+ *
+ * Samsung's S5P6442 SoC device nodes are listed in this file. S5P6442
+ * based board files can include this file and provide values for board specfic
+ * bindings.
+ *
+ * Note: This file does not include device nodes for all the controllers in
+ * S5P6442 SoC. As device tree coverage for S5P6442 increases, additional
+ * nodes can be added to this file.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include "s5p6442.dtsi"
+
+/ {
+	model = "Samsung Apollo based on S5P6442";
+	compatible = "samsung,apollo", "samsung,s5p6442";
+
+	aliases {
+		i2c3 = &i2c_pmic_musb;
+		i2c4 = &i2c_fm;
+		i2c5 = &i2c_mag_accel;
+		i2c6 = &i2c_prox;
+		i2c7 = &i2c_audio;
+	};
+
+	chosen {
+		bootargs = "console=ttySAC1,115200n8 console=tty1 root=/dev/mmcblk0p1 rw rootwait ignore_loglevel earlyprintk g_ether.dev_addr=02:01:02:03:04:05 g_ether.host_addr=06:07:08:09:0a:0b";
+	};
+
+	memory {
+		device_type = "memory";
+		reg = <0x20000000 0x10000000
+			0x40000000 0x5000000>;
+	};
+
+	vbat_reg: vbat-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "V_BAT";
+		regulator-min-microvolt = <4200000>;
+		regulator-max-microvolt = <4200000>;
+		regulator-always-on;
+	};
+
+	i2c_pmic_musb: i2c-3 {
+		compatible = "i2c-gpio";
+		gpios = /* SDA */ <&gpj4 0 0>,
+			/* SCL */ <&gpj4 3 0>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmic_musb_i2c_bus>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pmic@66 {
+			compatible = "maxim,max8998";
+			reg = <0x66>;
+			interrupt-parent = <&gph0>;
+			interrupts = <7 0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&pmic_irq>;
+
+			max8998,pmic-buck1-default-dvs-idx = <0>;
+			max8998,pmic-buck1-dvs-gpios = <&gph0 2 0>, <&gph0 3 0>;
+			max8998,pmic-buck1-dvs-voltage = <1200000>, <1200000>,
+							<1200000>, <1200000>;
+
+			max8998,pmic-buck2-default-dvs-idx = <0>;
+			max8998,pmic-buck2-dvs-gpio = <&gph0 4 0>;
+			max8998,pmic-buck2-dvs-voltage = <1200000>, <1200000>;
+
+			regulators {
+				ldo2_reg: LDO2 {
+					regulator-name = "VALIVE_1.1V_6442";
+					regulator-min-microvolt = <1100000>;
+					regulator-max-microvolt = <1100000>;
+					regulator-always-on;
+				};
+
+				ldo3_reg: LDO3 {
+					regulator-name = "VUSB_1.1V_6442";
+					regulator-min-microvolt = <1100000>;
+					regulator-max-microvolt = <1100000>;
+				};
+
+				ldo4_reg: LDO4 {
+					regulator-name = "VDD_PS_2.8V";
+					regulator-min-microvolt = <2800000>;
+					regulator-max-microvolt = <2800000>;
+				};
+
+				ldo5_reg: LDO5 {
+					regulator-name = "VTF_2.8V";
+					regulator-min-microvolt = <2800000>;
+					regulator-max-microvolt = <3300000>;
+				};
+
+				ldo6_reg: LDO6 {
+					regulator-name = "LDO6";
+					regulator-min-microvolt = <2000000>;
+					regulator-max-microvolt = <2000000>;
+				};
+
+				ldo7_reg: LDO7 {
+					regulator-name = "VADC_3.3V_6442";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+				};
+
+				ldo8_reg: LDO8 {
+					regulator-name = "VUSB_3.3V_6442";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+				};
+
+				ldo9_reg: LDO9 {
+					regulator-name = "VCC_2.8V_PDA";
+					regulator-min-microvolt = <2800000>;
+					regulator-max-microvolt = <2800000>;
+					regulator-always-on;
+				};
+
+				ldo10_reg: LDO10 {
+					regulator-name = "VPLL_1.1V_6442";
+					regulator-min-microvolt = <1100000>;
+					regulator-max-microvolt = <1100000>;
+					regulator-always-on;
+				};
+
+				ldo11_reg: LDO11 {
+					regulator-name = "VLCD_3.0V";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+					regulator-always-on;
+				};
+
+				ldo12_reg: LDO12 {
+					regulator-name = "VLCD_1.8V";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+				};
+
+				ldo13_reg: LDO13 {
+					regulator-name = "VTOUCH_2.8V";
+					regulator-min-microvolt = <2800000>;
+					regulator-max-microvolt = <2800000>;
+				};
+
+				ldo14_reg: LDO14 {
+					regulator-name = "VTOUCH_3.0V";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+				};
+
+				ldo15_reg: LDO15 {
+					regulator-name = "VPWM_3.3V";
+					regulator-min-microvolt = <3300000>;
+					regulator-max-microvolt = <3300000>;
+					regulator-always-on;
+				};
+
+				ldo16_reg: LDO16 {
+					regulator-name = "VDD_PS_3.0V";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+				};
+
+				ldo17_reg: LDO17 {
+					regulator-name = "VKEYLED_3.3V";
+					regulator-min-microvolt = <1600000>;
+					regulator-max-microvolt = <3300000>;
+					regulator-always-on;
+				};
+
+				buck1_reg: BUCK1 {
+					regulator-name = "VARM_1.1V_6442";
+					regulator-min-microvolt = <950000>;
+					regulator-max-microvolt = <1350000>;
+					regulator-always-on;
+				};
+
+				buck2_reg: BUCK2 {
+					regulator-name = "VINT_1.1V_6442";
+					regulator-min-microvolt = <1200000>;
+					regulator-max-microvolt = <1200000>;
+					regulator-always-on;
+				};
+
+				buck3_reg: BUCK3 {
+					regulator-name = "VCC_1.8V_PDA";
+					regulator-min-microvolt = <1800000>;
+					regulator-max-microvolt = <1800000>;
+					regulator-always-on;
+				};
+
+				buck4_reg: BUCK4 {
+					regulator-name = "BUCK4";
+					regulator-min-microvolt = <1200000>;
+					regulator-max-microvolt = <1200000>;
+				};
+
+				vichg_reg: ENVICHG {
+					regulator-name = "VICHG";
+				};
+
+				safeout1_reg: ESAFEOUT1 {
+					regulator-name = "SAFEOUT1";
+					regulator-always-on;
+				};
+
+				safeout2_reg: ESAFEOUT2 {
+					regulator-name = "SAFEOUT2";
+					regulator-boot-on;
+				};
+			};
+		};
+
+		fsa9480: muic@25 {
+			compatible = "fcs,fsa9480";
+			reg = <0x25>;
+			interrupt-parent = <&gph2>;
+			interrupts = <7 0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&muic_irq>;
+		};
+	};
+
+	i2c_fm: i2c-4 {
+		compatible = "i2c-gpio";
+		gpios = /* SDA */ <&gpj0 5 0>,
+			/* SCL */ <&gpj0 4 0>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&fm_i2c_bus>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		fm-radio@10 {
+			compatible = "silabs,si470x";
+			reg = <0x10>;
+			interrupt-parent = <&gpj2>;
+			interrupts = <4 0>;
+			reset-gpios = <&gpj2 5 GPIO_ACTIVE_LOW>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&fm_irq>;
+			// TODO
+		};
+	};
+
+	i2c_mag_accel: i2c-5 {
+		compatible = "i2c-gpio";
+		gpios = /* SDA */ <&gpd1 2 0>,
+			/* SCL */ <&gpd1 3 0>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&mag_accel_i2c_bus>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		magnetometer@1c {
+			compatible = "ak,ak8973";
+			reg = <0x1c>;
+			interrupt-parent = <&gph2>;
+			interrupts = <1 0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&mag_irq>;
+			// TODO
+		};
+
+		accelerometer@38 {
+			compatible = "bosch,bma180";
+			reg = <0x38>;
+			interrupt-parent = <&gph0>;
+			interrupts = <1 0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&accel_irq>;
+			// TODO
+		};
+
+	};
+
+	i2c_prox: i2c-6 {
+		compatible = "i2c-gpio";
+		gpios = /* SDA */ <&gpj3 5 0>,
+			/* SCL */ <&gpj3 6 0>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&prox_i2c_bus>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		proximity-sensor@44 {
+			compatible = "sharp,gp2ap002s00f";
+			reg = <0x44>;
+			interrupt-parent = <&gph3>;
+			interrupts = <1 0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&prox_irq>;
+			vled-supply = <&ldo4_reg>;
+			vcc-supply = <&ldo16_reg>;
+			// TODO
+		};
+	};
+
+	wm8994_reg: wm8994-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "WM8994_LDO";
+		gpio = <&gph1 5 0>;
+		enable-active-high;
+		vin-supply = <&vbat_reg>;
+	};
+
+	i2c_audio: i2c-7 {
+		compatible = "i2c-gpio";
+		gpios = /* SDA */ <&mp05 3 0>,
+			/* SCL */ <&mp05 2 0>;
+		i2c-gpio,delay-us = <2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_i2c_bus>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		wm8994: audio-codec@1a {
+			compatible = "wlf,wm8994";
+			reg = <0x1a>;
+			clock-names = "MCLK1";
+			clocks = <&clocks MOUT_CLKOUT>;
+			DBVDD-supply = <&buck3_reg>;
+			DCVDD-supply = <&buck3_reg>;
+			AVDD1-supply = <&buck3_reg>;
+			AVDD2-supply = <&buck3_reg>;
+			CPVDD-supply = <&buck3_reg>;
+			SPKVDD1-supply = <&wm8994_reg>;
+			SPKVDD2-supply = <&wm8994_reg>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			#sound-dai-cells = <1>;
+		};
+	};
+
+	key-backlight {
+		compatible = "led-regulator";
+		vled-supply = <&ldo17_reg>;
+		// TODO
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio_keys>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		autorepeat;
+
+		key@0 {
+			reg = <0>;
+			label = "POWER";
+			gpios = <&gph2 6 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_POWER>;
+			debounce-interval = <20>;
+		};
+
+		key@1 {
+			reg = <1>;
+			label = "HOME";
+			gpios = <&gph3 0 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_HOME>;
+			debounce-interval = <20>;
+		};
+
+		key@2 {
+			reg = <2>;
+			label = "VOL_UP";
+			gpios = <&gph3 4 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEUP>;
+			debounce-interval = <20>;
+		};
+
+		key@3 {
+			reg = <3>;
+			label = "VOL_DOWN";
+			gpios = <&gph3 5 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEDOWN>;
+			debounce-interval = <20>;
+		};
+
+		key@4 {
+			reg = <4>;
+			label = "BACK";
+			gpios = <&gph3 6 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_BACK>;
+			debounce-interval = <20>;
+		};
+
+		key@5 {
+			reg = <5>;
+			label = "MENU";
+			gpios = <&gph3 7 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_MENU>;
+			debounce-interval = <20>;
+		};
+	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+
+		simple-audio-card,cpu {
+			sound-dai = <&i2s0>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&wm8994 0>;
+			bitclock-master;
+			frame-master;
+		};
+	};
+
+	spi_lcd: spi-1 {
+		compatible = "spi-gpio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		gpio-sck = <&mp04 1 0>;
+		gpio-miso = <&mp04 2 0>;
+		gpio-mosi = <&mp04 3 0>;
+		cs-gpios = <&mp01 1 0>;
+		num-chipselects = <1>;
+
+		s6d04d1: display@0 {
+			compatible = "samsung,s6d04d1";
+			reg = <0>;
+			reset-gpios = <&mp05 5 1>;
+			vdd3-supply = <&ldo12_reg>;
+			vci-supply = <&ldo11_reg>;
+			spi-max-frequency = <1000000>;
+		};
+	};
+};
+
+&xusbxti {
+	clock-frequency = <12000000>;
+};
+
+&onenand {
+	status = "okay";
+
+	partition@1180000 {
+		label = "UBI";
+		reg = <0x1180000 0x1e380000>;
+	};
+};
+
+&i2s0 {
+	status = "okay";
+};
+
+&pinctrl0 {
+	gpio_keys: gpio-keys {
+		samsung,pins = "gph2-6", "gph3-0", "gph3-4", "gph3-5",
+				"gph3-6", "gph3-7";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	pmic_musb_i2c_bus: pmic-musb-i2c-bus {
+		samsung,pins = "gpj4-0", "gpj4-3";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	fm_i2c_bus: fm-musb-i2c-bus {
+		samsung,pins = "gpj0-4", "gpj0-5";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	mag_accel_i2c_bus: mag-accel-i2c-bus {
+		samsung,pins = "gpd1-2", "gpd1-3";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	prox_i2c_bus: prox-i2c-bus {
+		samsung,pins = "gpj3-3", "gpj3-6";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	audio_i2c_bus: audio-i2c-bus {
+		samsung,pins = "mp05-2", "mp05-3";
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	pmic_irq: pmic-irq {
+		samsung,pins = "gph0-7";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	fm_irq: fm-irq {
+		samsung,pins = "gpj2-4";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_UP>;
+	};
+
+	mag_irq: mag-irq {
+		samsung,pins = "gph2-1";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	accel_irq: accel-irq {
+		samsung,pins = "gph0-1";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	prox_irq: prox-irq {
+		samsung,pins = "gph3-1";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	muic_irq: muic-irq {
+		samsung,pins = "gph2-7";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	tf_detect: tf-detect {
+		samsung,pins = "gph2-0";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_NONE>;
+	};
+
+	ts_irq: ts-irq {
+		samsung,pins = "gpg0-2";
+		samsung,pin-function = <0>;
+		samsung,pin-pud = <PIN_PULL_UP>;
+	};
+};
+
+&pwm {
+	samsung,pwm-outputs = <0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pwm0_out>;
+};
+
+&uart0 {
+	pinctrl-0 = <&uart0_data &uart0_fctl>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&uart1 {
+	pinctrl-0 = <&uart1_data>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&uart2 {
+	pinctrl-0 = <&uart2_data>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&i2c0 {
+	samsung,i2c-sda-delay = <100>;
+	samsung,i2c-max-bus-freq = <400000>;
+	status = "okay";
+
+	camera-sensor@3c {
+		compatible = "samsung,s5k4ca";
+		reg = <0x3c>;
+		stbyn-gpios = <&gpg0 3 GPIO_ACTIVE_LOW>;
+		rstn-gpios = <&gpj1 5 GPIO_ACTIVE_LOW>;
+		// TODO
+	};
+};
+
+&i2c2 {
+	samsung,i2c-sda-delay = <100>;
+	samsung,i2c-max-bus-freq = <400000>;
+	status = "okay";
+
+	touchscreen@4a {
+		compatible = "atmel,qt602240_ts";
+		reg = <0x4a>;
+		interrupt-parent = <&gpg0>;
+		interrupts = <2 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_irq>;
+		gpios = <&gpe1 4 0>;
+		// TODO
+	};
+};
+
+&hsotg {
+	vusb_a-supply = <&ldo3_reg>;
+	vusb_d-supply = <&ldo8_reg>;
+	extcon = <&fsa9480>;
+	status = "okay";
+};
+
+&otgphy {
+	status = "okay";
+};
+
+&sdhci1 {
+	bus-width = <4>;
+	pinctrl-0 = <&sd1_clk &sd1_cmd &sd1_bus1 &sd1_bus4>;
+	pinctrl-names = "default";
+	// TODO (WLAN)
+};
+
+&sdhci2 {
+	bus-width = <4>;
+	cd-gpios = <&gph2 0 GPIO_ACTIVE_LOW>;
+	cd-inverted;
+	vmmc-supply = <&ldo5_reg>;
+	pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_bus1 &sd2_bus4 &tf_detect>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&fimd {
+	pinctrl-names = "default";
+	pinctrl-0 = <&lcd_data24>;
+	status = "okay";
+
+	display-timings {
+		native-mode = <&timing0>;
+
+		timing0: timing@0 {
+			/* 240x400@85Hz */
+			clock-frequency = <10090520>;
+			hactive = <240>;
+			vactive = <400>;
+			hfront-porch = <8>;
+			hback-porch = <24>;
+			hsync-len = <12>;
+			vback-porch = <8>;
+			vfront-porch = <8>;
+			vsync-len = <2>;
+			hsync-active = <1>;
+			vsync-active = <1>;
+			de-active = <1>;
+			pixelclk-active = <1>;
+		};
+	};
+};
+
+&camera {
+	// TODO (camera interface)
+};
+
+&adc {
+	vdd-supply = <&ldo7_reg>;
+	status = "okay";
+};
