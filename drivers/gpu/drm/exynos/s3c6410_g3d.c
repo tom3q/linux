@@ -1565,12 +1565,8 @@ static void g3d_process_shader_program(struct g3d_submit *submit,
 
 	memcpy(sp->req, req, sizeof(sp->req));
 
-	if (!length) {
-		/* Shader detach request */
-		return;
-	}
-
-	sp->obj = g3d_lookup_gem(submit, handle);
+	if (length)
+		sp->obj = g3d_lookup_gem(submit, handle);
 
 	if (unit == G3D_SHADER_PIXEL) {
 		set_bit(G3D_CONTEXT_STOP_PIXEL_SHADER, &ctx->state);
@@ -1582,6 +1578,10 @@ static void g3d_process_shader_program(struct g3d_submit *submit,
 
 #define VS_PC_RANGE(len)	((((len) / 16) - 1) << 16)
 #define PS_PC_RANGE(len)	(((len) / 16) - 1)
+
+static const uint32_t dummy_shader[] = {
+	0x00000000, 0x00000000, 0x00000000, 0x00000000, /* NOP */
+};
 
 static void g3d_restore_shader_program(struct g3d_context *ctx,
 				       struct g3d_shader_program *sp,
@@ -1598,14 +1598,17 @@ static void g3d_restore_shader_program(struct g3d_context *ctx,
 
 	req = sp->req;
 
-	nattrib= req_rsp_nattrib(req);
+	nattrib = req_rsp_nattrib(req);
 	offset = req[G3D_SHADER_PROG_OFFSET];
 	length = req[G3D_SHADER_PROG_LENGTH];
 
-	if (!length)
-		return;
+	if (length) {
+		data = sp->obj->buffer->kvaddr + offset;
+	} else {
+		data = dummy_shader;
+		length = sizeof(dummy_shader);
+	}
 
-	data = sp->obj->buffer->kvaddr + offset;
 	reg = g3d_shader_base[unit];
 	words = length / 4;
 
