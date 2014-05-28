@@ -25,6 +25,7 @@
 
 #include <clocksource/samsung_pwm.h>
 
+#include <asm/delay.h>
 
 /*
  * Clocksource driver
@@ -68,6 +69,7 @@ struct samsung_pwm_clocksource {
 	void __iomem *source_reg;
 	unsigned int irq[SAMSUNG_PWM_NUM];
 	struct samsung_pwm_variant variant;
+	struct delay_timer delay_timer;
 
 	struct clk *timerclk;
 
@@ -336,6 +338,11 @@ static u64 notrace samsung_read_sched_clock(void)
 	return samsung_clocksource_read(NULL);
 }
 
+static unsigned long samsung_read_counter_long(void)
+{
+	return ~readl_relaxed(pwm.source_reg);
+}
+
 static void __init samsung_clocksource_init(void)
 {
 	unsigned long pclk;
@@ -364,6 +371,18 @@ static void __init samsung_clocksource_init(void)
 	ret = clocksource_register_hz(&samsung_clocksource, clock_rate);
 	if (ret)
 		panic("samsung_clocksource_timer: can't register clocksource\n");
+
+	if (pwm.variant.bits == 32) {
+		/*
+		 * Use our clocksource for the delay loop.
+		 *
+		 * NOTE: Only 32-bit variant provides necessary precision
+		 * and overflow period.
+		 */
+		pwm.delay_timer.read_current_timer = samsung_read_counter_long;
+		pwm.delay_timer.freq = clock_rate;
+		register_current_timer_delay(&pwm.delay_timer);
+	}
 }
 
 static void __init samsung_timer_resources(void)
