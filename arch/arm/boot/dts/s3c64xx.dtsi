@@ -159,7 +159,6 @@
 			interrupts = <26>;
 			clock-names = "watchdog";
 			clocks = <&clocks PCLK_WDT>;
-			status = "disabled";
 		};
 
 		rtc: rtc@7e005000 {
