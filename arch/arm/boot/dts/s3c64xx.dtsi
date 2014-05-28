@@ -162,6 +162,15 @@
 			status = "disabled";
 		};
 
+		rtc: rtc@7e005000 {
+			compatible = "samsung,s3c6410-rtc";
+			reg = <0x7e005000 0x1000>;
+			interrupts-extended = <&vic1 28>, <&vic0 2>;
+			clock-names = "rtc";
+			clocks = <&clocks PCLK_RTC>;
+			status = "disabled";
+		};
+
 		i2c0: i2c@7f004000 {
 			compatible = "samsung,s3c2440-i2c";
 			reg = <0x7f004000 0x1000>;
