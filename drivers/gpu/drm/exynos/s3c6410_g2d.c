@@ -79,6 +79,9 @@ enum g2d_register {
 	ROT_OC_REG,
 	ROTATE_REG,
 
+	/* Endianess mode */
+	ENDIAN_REG,
+
 	/* X, Y increment setting */
 	X_INCR_REG,
 	Y_INCR_REG,
@@ -285,7 +288,10 @@ static const uint32_t g2d_registers[G2D_NUM_REGISTERS] = {
 	[ROT_OC_REG] = 0x340,
 	[ROTATE_REG] = 0x34c,
 
-	/* X] = 0, Y increment setting */
+	/* Endianess setting */
+	[ENDIAN_REG] = 0x350,
+
+	/* X, Y increment setting */
 	[X_INCR_REG] = 0x400,
 	[Y_INCR_REG] = 0x404,
 
