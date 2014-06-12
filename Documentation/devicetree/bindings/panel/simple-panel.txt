@@ -8,6 +8,13 @@ Optional properties:
 - enable-gpios: GPIO pin to enable or disable the panel
 - backlight: phandle of the backlight device attached to the panel
 
+Optional subnodes:
+- display-timings: fixed display timings of the panel, if cannot be detected
+                   automatically. Generic display timings binding is used,
+		   which is described in [1].
+
+[1] Documentation/devicetree/bindings/video/display-timing.txt
+
 Example:
 
 	panel: panel {
