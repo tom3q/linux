@@ -732,7 +732,8 @@ config SND_SOC_WM9712
 	tristate
 
 config SND_SOC_WM9713
-	tristate
+	tristate "Wolfson Microelectronics WM9713 AC97 CODEC"
+	depends on SND_SOC_AC97_BUS
 
 # Amp
 config SND_SOC_LM4857
