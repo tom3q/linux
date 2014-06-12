@@ -36,6 +36,10 @@ config SND_S3C24XX_AC97
 	tristate
 	select SND_SOC_AC97_BUS
 
+config SND_SAMSUNG_AC97
+	tristate "Support for Samsung SoC AC97 controller"
+	select SND_SOC_AC97_BUS
+
 config SND_SAMSUNG_SPDIF
 	tristate
 	select SND_SOC_SPDIF
