@@ -32,7 +32,7 @@ config SND_S3C2412_SOC_I2S
 config SND_SAMSUNG_PCM
 	tristate
 
-config SND_SAMSUNG_AC97
+config SND_S3C24XX_AC97
 	tristate
 	select SND_SOC_AC97_BUS
 
@@ -86,7 +86,7 @@ config SND_SOC_SAMSUNG_SMDK2443_WM9710
 	select S3C2410_DMA
 	select AC97_BUS
 	select SND_SOC_AC97_CODEC
-	select SND_SAMSUNG_AC97
+	select SND_S3C24XX_AC97
 	help
 	  Say Y if you want to add support for SoC audio on smdk2443
 	  with the WM9710.
@@ -97,7 +97,7 @@ config SND_SOC_SAMSUNG_LN2440SBC_ALC650
 	select S3C2410_DMA
 	select AC97_BUS
 	select SND_SOC_AC97_CODEC
-	select SND_SAMSUNG_AC97
+	select SND_S3C24XX_AC97
 	help
 	  Say Y if you want to add support for SoC audio on ln2440sbc
 	  with the ALC650.
@@ -148,7 +148,7 @@ config SND_SOC_SAMSUNG_SMDK_WM9713
 	tristate "SoC AC97 Audio support for SMDK with WM9713"
 	depends on SND_SOC_SAMSUNG && (MACH_SMDK6410 || MACH_SMDKC100 || MACH_SMDKV210 || MACH_SMDKC110)
 	select SND_SOC_WM9713
-	select SND_SAMSUNG_AC97
+	select SND_S3C24XX_AC97
 	help
 	  Say Y if you want to add support for SoC audio on the SMDK.
 
