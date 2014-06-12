@@ -28,6 +28,8 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 
+#include <video/of_display_timing.h>
+
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_mipi_dsi.h>
@@ -229,6 +231,36 @@ static const struct drm_panel_funcs panel_simple_funcs = {
 	.get_modes = panel_simple_get_modes,
 };
 
+static int panel_simple_modes_from_dt(struct panel_simple *panel,
+				       struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	struct drm_display_mode *mode;
+	struct panel_desc *desc;
+	int ret;
+
+	desc = devm_kzalloc(dev, sizeof(*desc), GFP_KERNEL);
+	if (!desc)
+		return -ENOMEM;
+
+	mode = devm_kzalloc(dev, sizeof(*mode), GFP_KERNEL);
+	if (!mode)
+		return -ENOMEM;
+
+	ret = of_get_drm_display_mode(np, mode, OF_USE_NATIVE_MODE);
+	if (ret < 0)
+		return ret;
+
+	desc->modes = mode;
+	desc->num_modes = 1;
+	desc->size.width = mode->hdisplay;
+	desc->size.height = mode->vdisplay;
+
+	panel->desc = desc;
+
+	return 0;
+}
+
 static int panel_simple_probe(struct device *dev, const struct panel_desc *desc)
 {
 	struct device_node *backlight, *ddc;
@@ -279,6 +311,12 @@ static int panel_simple_probe(struct device *dev, const struct panel_desc *desc)
 		if (!panel->ddc) {
 			err = -EPROBE_DEFER;
 			goto free_backlight;
+		}
+	} else if (!panel->desc && dev->of_node && IS_ENABLED(CONFIG_OF)) {
+		err = panel_simple_modes_from_dt(panel, dev);
+		if (err < 0) {
+			dev_err(dev, "failed to parse display mode\n");
+			return err;
 		}
 	}
 
