@@ -165,6 +165,20 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pwm0_out>;
 	};
+
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "Mini6410 AC97 Audio";
+
+		simple-audio-card,dai-link@0 {
+			cpu {
+				sound-dai = <&ac97 0>;
+			};
+			codec {
+				sound-dai = <&wm9713 0>;
+			};
+		};
+	};
 };
 
 &sdhci0 {
@@ -224,5 +238,16 @@
 		compatible = "atmel,24c08";
 		reg = <0x50>;
 		pagesize = <16>;
+	};
+};
+
+&ac97 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&ac97_bus_0>;
+	status = "okay";
+
+	wm9713: audio-codec {
+		compatible = "wlf,wm9713";
+		#sound-dai-cells = <1>;
 	};
 };
