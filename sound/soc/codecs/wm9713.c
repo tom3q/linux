@@ -16,6 +16,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/device.h>
@@ -1266,10 +1267,18 @@ static int wm9713_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_OF
+static const struct of_device_id wm9713_of_matches[] = {
+	{ .compatible = "wlf,wm9713", },
+	{ /* sentinel */ }
+};
+#endif
+
 static struct platform_driver wm9713_codec_driver = {
 	.driver = {
 			.name = "wm9713-codec",
 			.owner = THIS_MODULE,
+			.of_match_table = of_match_ptr(wm9713_of_matches),
 	},
 
 	.probe = wm9713_probe,
