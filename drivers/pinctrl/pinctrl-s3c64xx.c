@@ -589,6 +589,29 @@ static int s3c64xx_eint0_irq_set_type(struct irq_data *irqd, unsigned int type)
 	return 0;
 }
 
+static u32 s3c64xx_eint_wake_mask = 0xffffffff;
+
+u32 s3c64xx_get_eint_wake_mask(void)
+{
+	return s3c64xx_eint_wake_mask;
+}
+
+static int s3c64xx_eint0_irq_set_wake(struct irq_data *irqd, unsigned int on)
+{
+	struct s3c64xx_eint0_domain_data *ddata =
+					irq_data_get_irq_chip_data(irqd);
+	u32 bit = 1 << ddata->eints[irqd->hwirq];
+
+	pr_info("wake %s for irq %d\n", on ? "enabled" : "disabled", irqd->irq);
+
+	if (!on)
+		s3c64xx_eint_wake_mask |= bit;
+	else
+		s3c64xx_eint_wake_mask &= ~bit;
+
+	return 0;
+}
+
 /*
  * irq_chip for wakeup interrupts
  */
@@ -598,6 +621,7 @@ static struct irq_chip s3c64xx_eint0_irq_chip = {
 	.irq_mask	= s3c64xx_eint0_irq_mask,
 	.irq_ack	= s3c64xx_eint0_irq_ack,
 	.irq_set_type	= s3c64xx_eint0_irq_set_type,
+	.irq_set_wake	= s3c64xx_eint0_irq_set_wake,
 };
 
 static inline void s3c64xx_irq_demux_eint(unsigned int irq,

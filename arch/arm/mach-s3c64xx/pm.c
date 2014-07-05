@@ -368,12 +368,12 @@ int __init s3c64xx_pm_init(void)
 {
 	int i;
 
-	s3c_pm_init();
-
 #ifdef CONFIG_OF
 	if (of_have_populated_dt())
 		return s3c64xx_pm_parse_domains();
 #endif
+
+	s3c_pm_init();
 
 	for (i = 0; i < ARRAY_SIZE(s3c64xx_pm_domains); i++) {
 		struct s3c64xx_pm_domain *pd = s3c64xx_pm_domains[i];

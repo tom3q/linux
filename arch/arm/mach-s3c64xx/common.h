@@ -63,4 +63,10 @@ extern struct pl08x_platform_data s3c64xx_dma0_plat_data;
 extern struct pl08x_platform_data s3c64xx_dma1_plat_data;
 #endif
 
+#ifdef CONFIG_PINCTRL_S3C64XX
+extern u32 s3c64xx_get_eint_wake_mask(void);
+#else
+static inline u32 s3c64xx_get_eint_wake_mask(void) { return 0xffffffff; }
+#endif
+
 #endif /* __ARCH_ARM_MACH_S3C64XX_COMMON_H */

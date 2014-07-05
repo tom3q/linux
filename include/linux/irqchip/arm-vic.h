@@ -27,7 +27,10 @@
 #define VIC_INT_ENABLE_CLEAR		0x14
 
 struct device_node;
+struct irq_data;
 struct pt_regs;
+
+extern int (*vic_arch_set_wake)(struct irq_data *, unsigned int);
 
 void __vic_init(void __iomem *base, int parent_irq, int irq_start,
 		u32 vic_sources, u32 resume_sources, struct device_node *node);

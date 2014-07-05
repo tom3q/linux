@@ -88,6 +88,8 @@ static struct vic_device vic_devices[CONFIG_ARM_VIC_NR];
 
 static int vic_id;
 
+int (*vic_arch_set_wake)(struct irq_data *, unsigned int);
+
 static void vic_handle_irq(struct pt_regs *regs);
 
 /**
@@ -357,12 +359,19 @@ static int vic_set_wake(struct irq_data *d, unsigned int on)
 	struct vic_device *v = vic_from_irq(d->irq);
 	unsigned int off = d->hwirq;
 	u32 bit = 1 << off;
+	int ret;
 
 	if (!v)
 		return -EINVAL;
 
 	if (!(bit & v->resume_sources))
 		return -EINVAL;
+
+	if (vic_arch_set_wake) {
+		ret = vic_arch_set_wake(d, on);
+		if (ret)
+			return ret;
+	}
 
 	if (on)
 		v->resume_irqs |= bit;
