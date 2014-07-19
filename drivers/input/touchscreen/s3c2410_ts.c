@@ -264,7 +264,7 @@ static int s3c2410ts_probe(struct platform_device *pdev)
 		return -ENOENT;
 	}
 
-	clk_enable(ts.clock);
+	clk_prepare_enable(ts.clock);
 	dev_dbg(dev, "got and enabled clocks\n");
 
 	ts.irq_tc = ret = platform_get_irq(pdev, 0);
@@ -369,7 +369,7 @@ static int s3c2410ts_remove(struct platform_device *pdev)
 	free_irq(ts.irq_tc, ts.input);
 	del_timer_sync(&touch_timer);
 
-	clk_disable(ts.clock);
+	clk_disable_unprepare(ts.clock);
 	clk_put(ts.clock);
 
 	input_unregister_device(ts.input);
@@ -383,7 +383,7 @@ static int s3c2410ts_suspend(struct device *dev)
 {
 	writel(TSC_SLEEP, ts.io + S3C2410_ADCTSC);
 	disable_irq(ts.irq_tc);
-	clk_disable(ts.clock);
+	clk_disable_unprepare(ts.clock);
 
 	return 0;
 }
@@ -393,7 +393,7 @@ static int s3c2410ts_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct s3c2410_ts_mach_info *info = dev_get_platdata(&pdev->dev);
 
-	clk_enable(ts.clock);
+	clk_prepare_enable(ts.clock);
 	enable_irq(ts.irq_tc);
 
 	/* Initialise registers */
