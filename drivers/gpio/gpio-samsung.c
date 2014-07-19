@@ -18,6 +18,7 @@
 #include <linux/irq.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
+#include <linux/gpio-samsung.h>
 #include <linux/init.h>
 #include <linux/spinlock.h>
 #include <linux/module.h>
@@ -32,12 +33,8 @@
 
 #include <mach/map.h>
 #include <mach/regs-gpio.h>
-#include <mach/gpio-samsung.h>
 
 #include <plat/cpu.h>
-#include <plat/gpio-core.h>
-#include <plat/gpio-cfg.h>
-#include <plat/gpio-cfg-helpers.h>
 #include <plat/pm.h>
 
 int samsung_gpio_setpull_updown(struct samsung_gpio_chip *chip,
