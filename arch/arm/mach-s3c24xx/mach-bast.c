@@ -565,6 +565,7 @@ static void __init bast_init_time(void)
 
 static void __init bast_init(void)
 {
+	s3c24xx_init_gpio();
 	register_syscore_ops(&bast_pm_syscore_ops);
 
 	s3c_i2c0_set_platdata(&bast_i2c_info);

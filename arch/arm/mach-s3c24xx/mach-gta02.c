@@ -561,6 +561,7 @@ static void gta02_poweroff(void)
 
 static void __init gta02_machine_init(void)
 {
+	s3c24xx_init_gpio();
 	/* Set the panic callback to turn AUX LED on or off. */
 	panic_blink = gta02_panic_blink;
 

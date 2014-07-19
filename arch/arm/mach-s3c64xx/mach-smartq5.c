@@ -143,6 +143,7 @@ static struct platform_device *smartq5_devices[] __initdata = {
 
 static void __init smartq5_machine_init(void)
 {
+	s3c64xx_init_gpio();
 	s3c_fb_set_platdata(&smartq5_lcd_pdata);
 
 	smartq_machine_init();

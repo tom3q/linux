@@ -629,6 +629,8 @@ static void __init mini2440_init(void)
 	struct mini2440_features_t features = { 0 };
 	int i;
 
+	s3c24xx_init_gpio();
+
 	printk(KERN_INFO "MINI2440: Option string mini2440=%s\n",
 			mini2440_features_str);
 

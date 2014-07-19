@@ -656,6 +656,7 @@ static void __init smdk6410_machine_init(void)
 {
 	u32 cs1;
 
+	s3c64xx_init_gpio();
 	s3c_i2c0_set_platdata(NULL);
 	s3c_i2c1_set_platdata(NULL);
 	s3c_fb_set_platdata(&smdk6410_lcd_pdata);

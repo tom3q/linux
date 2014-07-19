@@ -197,6 +197,7 @@ static void __init rx3715_reserve(void)
 
 static void __init rx3715_init_machine(void)
 {
+	s3c24xx_init_gpio();
 #ifdef CONFIG_PM_H1940
 	memcpy(phys_to_virt(H1940_SUSPEND_RESUMEAT), h1940_pm_return, 1024);
 #endif

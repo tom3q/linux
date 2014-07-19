@@ -111,6 +111,7 @@ static void __init otom11_init_time(void)
 
 static void __init otom11_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c_i2c0_set_platdata(NULL);
 	platform_add_devices(otom11_devices, ARRAY_SIZE(otom11_devices));
 }

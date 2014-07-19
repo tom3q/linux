@@ -233,6 +233,7 @@ static void amlm5900_init_pm(void)
 }
 static void __init amlm5900_init(void)
 {
+	s3c24xx_init_gpio();
 	amlm5900_init_pm();
 #ifdef CONFIG_FB_S3C2410
 	s3c24xx_fb_set_platdata(&amlm5900_fb_info);

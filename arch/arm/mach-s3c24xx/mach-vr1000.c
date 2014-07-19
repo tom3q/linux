@@ -321,6 +321,7 @@ static void __init vr1000_init_time(void)
 
 static void __init vr1000_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c_i2c0_set_platdata(NULL);
 	platform_add_devices(vr1000_devices, ARRAY_SIZE(vr1000_devices));
 

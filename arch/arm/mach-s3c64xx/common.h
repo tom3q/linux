@@ -21,6 +21,7 @@
 
 void s3c64xx_init_irq(u32 vic0, u32 vic1);
 void s3c64xx_init_io(struct map_desc *mach_desc, int size);
+void s3c64xx_init_gpio(void);
 
 void s3c64xx_restart(enum reboot_mode mode, const char *cmd);
 void s3c64xx_init_late(void);

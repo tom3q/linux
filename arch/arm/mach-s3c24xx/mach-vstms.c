@@ -151,6 +151,7 @@ static void __init vstms_init_time(void)
 
 static void __init vstms_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c_i2c0_set_platdata(NULL);
 	s3c_nand_set_platdata(&vstms_nand_info);
 

@@ -412,6 +412,7 @@ static void __init anubis_init_time(void)
 
 static void __init anubis_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c_i2c0_set_platdata(NULL);
 	s3c_nand_set_platdata(&anubis_nand_info);
 	simtec_audio_add(NULL, false, &anubis_audio);

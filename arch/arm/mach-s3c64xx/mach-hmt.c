@@ -255,6 +255,7 @@ static void __init hmt_map_io(void)
 
 static void __init hmt_machine_init(void)
 {
+	s3c64xx_init_gpio();
 	s3c_i2c0_set_platdata(NULL);
 	s3c_fb_set_platdata(&hmt_lcd_pdata);
 	s3c_nand_set_platdata(&hmt_nand_info);

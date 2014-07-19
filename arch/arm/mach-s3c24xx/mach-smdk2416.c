@@ -233,6 +233,7 @@ static void __init smdk2416_map_io(void)
 
 static void __init smdk2416_machine_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c_i2c0_set_platdata(NULL);
 	s3c_fb_set_platdata(&smdk2416_fb_platdata);
 

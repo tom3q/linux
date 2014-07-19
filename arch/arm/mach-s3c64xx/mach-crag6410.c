@@ -812,6 +812,8 @@ static struct s3c_hsotg_plat crag6410_hsotg_pdata;
 
 static void __init crag6410_machine_init(void)
 {
+	s3c64xx_init_gpio();
+
 	/* Open drain IRQs need pullups */
 	s3c_gpio_setpull(S3C64XX_GPM(0), S3C_GPIO_PULL_UP);
 	s3c_gpio_setpull(S3C64XX_GPN(0), S3C_GPIO_PULL_UP);

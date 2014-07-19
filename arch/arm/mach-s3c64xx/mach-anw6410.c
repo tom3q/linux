@@ -216,6 +216,7 @@ static void __init anw6410_map_io(void)
 
 static void __init anw6410_machine_init(void)
 {
+	s3c64xx_init_gpio();
 	s3c_fb_set_platdata(&anw6410_lcd_pdata);
 
 	gpio_request(S3C64XX_GPF(1), "panel power");

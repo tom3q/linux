@@ -316,6 +316,7 @@ static void __init qt2410_init_time(void)
 
 static void __init qt2410_machine_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c_nand_set_platdata(&qt2410_nand_info);
 
 	switch (tft_type) {

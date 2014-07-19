@@ -132,6 +132,7 @@ static void __init smdk2443_init_time(void)
 
 static void __init smdk2443_machine_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c_i2c0_set_platdata(NULL);
 
 #ifdef CONFIG_SND_SOC_SMDK2443_WM9710

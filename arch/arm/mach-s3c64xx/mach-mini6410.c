@@ -319,6 +319,8 @@ static void __init mini6410_machine_init(void)
 	u32 cs1;
 	struct mini6410_features_t features = { 0 };
 
+	s3c64xx_init_gpio();
+
 	printk(KERN_INFO "MINI6410: Option string mini6410=%s\n",
 			mini6410_features_str);
 

@@ -81,6 +81,7 @@ static struct i2c_board_info i2c_devs[] __initdata = {
 
 static void __init smdk6400_machine_init(void)
 {
+	s3c64xx_init_gpio();
 	i2c_register_board_info(0, i2c_devs, ARRAY_SIZE(i2c_devs));
 	platform_add_devices(smdk6400_devices, ARRAY_SIZE(smdk6400_devices));
 }

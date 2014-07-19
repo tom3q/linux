@@ -131,4 +131,6 @@ void __init s3c2443_common_clk_init(struct device_node *np, unsigned long xti_f,
 				    void __iomem *reg_base);
 #endif
 
+void __init s3c24xx_init_gpio(void);
+
 #endif /* __ARCH_ARM_MACH_S3C24XX_COMMON_H */

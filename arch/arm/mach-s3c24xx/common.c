@@ -209,6 +209,22 @@ static void s3c24xx_default_idle(void)
 		     S3C2410_CLKCON);
 }
 
+/* GPIO registrations */
+
+static struct resource s3c24xx_gpio_resource[] = {
+	[0] = DEFINE_RES_MEM(S3C24XX_PA_GPIO, S3C24XX_SZ_GPIO),
+};
+
+static void s3c24xx_init_gpio(void)
+{
+	const char *name = soc_is_s3c2412() ? "s3c2412-gpio" : "s3c24xx-gpio";
+
+	platform_device_register_simple(name, -1, s3c24xx_gpio_resource,
+					ARRAY_SIZE(s3c24xx_gpio_resource));
+}
+
+/* PWM timer registrations */
+
 static struct samsung_pwm_variant s3c24xx_pwm_variant = {
 	.bits		= 16,
 	.div_base	= 1,

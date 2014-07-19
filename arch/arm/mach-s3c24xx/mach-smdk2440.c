@@ -170,6 +170,7 @@ static void __init smdk2440_init_time(void)
 
 static void __init smdk2440_machine_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c24xx_fb_set_platdata(&smdk2440_fb_info);
 	s3c_i2c0_set_platdata(NULL);
 

@@ -526,6 +526,7 @@ static void jive_power_off(void)
 
 static void __init jive_machine_init(void)
 {
+	s3c24xx_init_gpio();
 	/* register system core operations for managing low level suspend */
 
 	register_syscore_ops(&jive_pm_syscore_ops);

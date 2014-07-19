@@ -753,6 +753,7 @@ static void __init rx1950_init_machine(void)
 {
 	int i;
 
+	s3c24xx_init_gpio();
 	s3c24xx_fb_set_platdata(&rx1950_lcd_cfg);
 	s3c24xx_udc_set_platdata(&rx1950_udc_cfg);
 	s3c24xx_ts_set_platdata(&rx1950_ts_cfg);

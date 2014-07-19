@@ -680,6 +680,7 @@ static void __init h1940_init(void)
 {
 	u32 tmp;
 
+	s3c24xx_init_gpio();
 	s3c24xx_fb_set_platdata(&h1940_fb_info);
 	s3c24xx_mci_set_platdata(&h1940_mmc_cfg);
  	s3c24xx_udc_set_platdata(&h1940_udc_cfg);

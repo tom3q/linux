@@ -289,6 +289,8 @@ static void __init real6410_machine_init(void)
 	u32 cs1;
 	struct real6410_features_t features = { 0 };
 
+	s3c64xx_init_gpio();
+
 	printk(KERN_INFO "REAL6410: Option string real6410=%s\n",
 			real6410_features_str);
 

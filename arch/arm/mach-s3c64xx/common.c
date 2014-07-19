@@ -190,6 +190,17 @@ void __init samsung_timer_init(void)
 					timer_irqs, &s3c64xx_pwm_variant);
 }
 
+static struct resource s3c64xx_gpio_resource[] = {
+	[0] = DEFINE_RES_MEM(S3C64XX_PA_GPIO, S3C64XX_SZ_GPIO),
+};
+
+void __init s3c64xx_init_gpio(void)
+{
+	platform_device_register_simple("s3c64xx-gpio", -1,
+					s3c64xx_gpio_resource,
+					ARRAY_SIZE(s3c64xx_gpio_resource));
+}
+
 /* read cpu identification code */
 
 void __init s3c64xx_init_io(struct map_desc *mach_desc, int size)

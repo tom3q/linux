@@ -548,6 +548,8 @@ static void __init n30_init_time(void)
 
 static void __init n30_init(void)
 {
+	s3c24xx_init_gpio();
+
 	WARN_ON(gpio_request(S3C2410_GPG(4), "mmc power"));
 
 	s3c24xx_fb_set_platdata(&n30_fb_info);

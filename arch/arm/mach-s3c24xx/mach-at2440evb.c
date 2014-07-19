@@ -203,6 +203,7 @@ static void __init at2440evb_init_time(void)
 
 static void __init at2440evb_init(void)
 {
+	s3c24xx_init_gpio();
 	s3c24xx_fb_set_platdata(&at2440evb_fb_info);
 	s3c24xx_mci_set_platdata(&at2440evb_mci_pdata);
 	s3c_nand_set_platdata(&at2440evb_nand_info);
