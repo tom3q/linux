@@ -51,15 +51,6 @@ config SAMSUNG_ATAGS
 
 if SAMSUNG_ATAGS
 
-config S3C_GPIO_SPACE
-	int "Space between gpio banks"
-	default 0
-	help
-	  Add a number of spare GPIO entries between each bank for debugging
-	  purposes. This allows any problems where an counter overflows from
-	  one bank to another to be caught, at the expense of using a little
-	  more memory.
-
 config S3C_GPIO_TRACK
 	bool
 	help

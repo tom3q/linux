@@ -35,13 +35,8 @@
 
 /* GPIO bank numbes */
 
-/* CONFIG_S3C_GPIO_SPACE allows the user to select extra
- * space for debugging purposes so that any accidental
- * change from one gpio bank to another can be caught.
-*/
-
 #define S3C64XX_GPIO_NEXT(__gpio) \
-	((__gpio##_START) + (__gpio##_NR) + CONFIG_S3C_GPIO_SPACE + 1)
+	((__gpio##_START) + (__gpio##_NR) + 1)
 
 enum s3c_gpio_number {
 	S3C64XX_GPIO_A_START = 0,

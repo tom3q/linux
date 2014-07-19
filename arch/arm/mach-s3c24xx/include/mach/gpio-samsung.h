@@ -52,12 +52,8 @@
 #define S3C2410_GPIO_L_NR	(32)	/* technically 15. */
 #define S3C2410_GPIO_M_NR	(32)	/* technically 2. */
 
-#if CONFIG_S3C_GPIO_SPACE != 0
-#error CONFIG_S3C_GPIO_SPACE cannot be nonzero at the moment
-#endif
-
 #define S3C2410_GPIO_NEXT(__gpio) \
-	((__gpio##_START) + (__gpio##_NR) + CONFIG_S3C_GPIO_SPACE + 0)
+	((__gpio##_START) + (__gpio##_NR) + 0)
 
 #ifndef __ASSEMBLY__
 

@@ -348,7 +348,6 @@ void samsung_pm_save_gpios(void)
 			  ourchip->pm_save[3]);
 
 		gpio_nr += ourchip->chip.ngpio;
-		gpio_nr += CONFIG_S3C_GPIO_SPACE;
 	}
 }
 
@@ -381,6 +380,5 @@ void samsung_pm_restore_gpios(void)
 		samsung_pm_resume_gpio(ourchip);
 
 		gpio_nr += ourchip->chip.ngpio;
-		gpio_nr += CONFIG_S3C_GPIO_SPACE;
 	}
 }
