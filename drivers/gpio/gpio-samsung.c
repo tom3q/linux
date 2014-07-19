@@ -20,6 +20,7 @@
 #include <linux/gpio.h>
 #include <linux/gpio-samsung.h>
 #include <linux/init.h>
+#include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
@@ -31,10 +32,13 @@
 
 #include <asm/irq.h>
 
-#include <mach/map.h>
+enum samsung_gpio_type {
+	TYPE_S3C24XX,
+	TYPE_S3C2412,
+	TYPE_S3C64XX,
+};
 
-#include <plat/cpu.h>
-#include <plat/pm.h>
+static enum samsung_gpio_type gpio_type;
 
 int samsung_gpio_setpull_updown(struct samsung_gpio_chip *chip,
 				unsigned int off, samsung_gpio_pull_t pull)
@@ -351,7 +355,7 @@ static unsigned s3c24xx_gpio_getcfg_abank(struct samsung_gpio_chip *chip,
 }
 #endif
 
-static void __init samsung_gpiolib_set_cfg(struct samsung_gpio_cfg *chipcfg,
+static void samsung_gpiolib_set_cfg(struct samsung_gpio_cfg *chipcfg,
 					   int nr_chips)
 {
 	for (; nr_chips > 0; nr_chips--, chipcfg++) {
@@ -696,7 +700,7 @@ static int samsung_gpiolib_get(struct gpio_chip *chip, unsigned offset)
 #ifdef CONFIG_S3C_GPIO_TRACK
 struct samsung_gpio_chip *s3c_gpios[S3C_GPIO_END];
 
-static __init void s3c_gpiolib_track(struct samsung_gpio_chip *chip)
+static void s3c_gpiolib_track(struct samsung_gpio_chip *chip)
 {
 	unsigned int gpn;
 	int i;
@@ -719,7 +723,7 @@ static __init void s3c_gpiolib_track(struct samsung_gpio_chip *chip)
  * other parts of the system.
  */
 
-static void __init samsung_gpiolib_add(struct samsung_gpio_chip *chip)
+static void samsung_gpiolib_add(struct samsung_gpio_chip *chip)
 {
 	struct gpio_chip *gc = &chip->chip;
 	int ret;
@@ -754,7 +758,7 @@ static void __init samsung_gpiolib_add(struct samsung_gpio_chip *chip)
 		s3c_gpiolib_track(chip);
 }
 
-static void __init s3c24xx_gpiolib_add_chips(struct samsung_gpio_chip *chip,
+static void s3c24xx_gpiolib_add_chips(struct samsung_gpio_chip *chip,
 					     int nr_chips, void __iomem *base)
 {
 	int i;
@@ -783,7 +787,7 @@ static void __init s3c24xx_gpiolib_add_chips(struct samsung_gpio_chip *chip,
 	}
 }
 
-static void __init samsung_gpiolib_add_2bit_chips(struct samsung_gpio_chip *chip,
+static void samsung_gpiolib_add_2bit_chips(struct samsung_gpio_chip *chip,
 						  int nr_chips, void __iomem *base,
 						  unsigned int offset)
 {
@@ -822,7 +826,7 @@ static void __init samsung_gpiolib_add_2bit_chips(struct samsung_gpio_chip *chip
  * (samsung_gpiolib_add_4bit2_chips)for each case.
  */
 
-static void __init samsung_gpiolib_add_4bit_chips(struct samsung_gpio_chip *chip,
+static void samsung_gpiolib_add_4bit_chips(struct samsung_gpio_chip *chip,
 						  int nr_chips, void __iomem *base)
 {
 	int i;
@@ -846,7 +850,7 @@ static void __init samsung_gpiolib_add_4bit_chips(struct samsung_gpio_chip *chip
 	}
 }
 
-static void __init samsung_gpiolib_add_4bit2_chips(struct samsung_gpio_chip *chip,
+static void samsung_gpiolib_add_4bit2_chips(struct samsung_gpio_chip *chip,
 						   int nr_chips,
 						   void __iomem *base)
 {
@@ -876,7 +880,7 @@ int samsung_gpiolib_to_irq(struct gpio_chip *chip, unsigned int offset)
 static int s3c24xx_gpiolib_fbank_to_irq(struct gpio_chip *chip, unsigned offset)
 {
 	if (offset < 4) {
-		if (soc_is_s3c2412())
+		if (gpio_type == TYPE_S3C2412)
 			return IRQ_EINT0_2412 + offset;
 		else
 			return IRQ_EINT0 + offset;
@@ -1186,9 +1190,12 @@ static struct samsung_gpio_chip s3c64xx_gpios_2bit[] = {
 #endif
 };
 
-/* TODO: cleanup soc_is_* */
-static __init int samsung_gpiolib_init(void)
+static int samsung_gpio_probe(struct platform_device *pdev)
 {
+	const struct platform_device_id *id = platform_get_device_id(pdev);
+	struct resource *res;
+	void __iomem *base;
+
 	/*
 	 * Currently there are two drivers that can provide GPIO support for
 	 * Samsung SoCs. For device tree enabled platforms, the new
@@ -1198,27 +1205,54 @@ static __init int samsung_gpiolib_init(void)
 	if (of_have_populated_dt())
 		return -ENODEV;
 
+	gpio_type = id->driver_data;
+
 	samsung_gpiolib_set_cfg(samsung_gpio_cfgs, ARRAY_SIZE(samsung_gpio_cfgs));
 
-	if (soc_is_s3c24xx()) {
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	if (gpio_type == TYPE_S3C24XX || gpio_type == TYPE_S3C2412) {
 		s3c24xx_gpiolib_add_chips(s3c24xx_gpios,
-				ARRAY_SIZE(s3c24xx_gpios), S3C24XX_VA_GPIO);
-	} else if (soc_is_s3c64xx()) {
+				ARRAY_SIZE(s3c24xx_gpios), base);
+	} else if (gpio_type == TYPE_S3C64XX) {
 		samsung_gpiolib_add_2bit_chips(s3c64xx_gpios_2bit,
 				ARRAY_SIZE(s3c64xx_gpios_2bit),
-				S3C64XX_VA_GPIO, 0x20);
+				base, 0x20);
 		samsung_gpiolib_add_4bit_chips(s3c64xx_gpios_4bit,
 				ARRAY_SIZE(s3c64xx_gpios_4bit),
-				S3C64XX_VA_GPIO);
+				base);
 		samsung_gpiolib_add_4bit2_chips(s3c64xx_gpios_4bit2,
 				ARRAY_SIZE(s3c64xx_gpios_4bit2),
-				S3C64XX_VA_GPIO);
+				base);
 	} else {
 		WARN(1, "Unknown SoC in gpio-samsung, no GPIOs added\n");
 		return -ENODEV;
 	}
 
 	return 0;
+}
+
+static const struct platform_device_id samsung_gpio_id_table[] = {
+	{ .name = "s3c24xx-gpio", .driver_data = TYPE_S3C24XX },
+	{ .name = "s3c2412-gpio", .driver_data = TYPE_S3C2412 },
+	{ .name = "s3c64xx-gpio", .driver_data = TYPE_S3C64XX },
+	{ /* sentinel */ }
+};
+
+static struct platform_driver samsung_gpio_driver = {
+	.probe = samsung_gpio_probe,
+	.driver = {
+		.name = "samsung-gpio",
+	},
+	.id_table = samsung_gpio_id_table,
+};
+
+static int samsung_gpiolib_init(void)
+{
+	return platform_driver_register(&samsung_gpio_driver);
 }
 core_initcall(samsung_gpiolib_init);
 
