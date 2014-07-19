@@ -198,6 +198,7 @@ struct samsung_gpio_cfg;
 /**
  * struct samsung_gpio_chip - wrapper for specific implementation of gpio
  * @chip: The chip structure to be exported via gpiolib.
+ * @offset: The base offset to the gpio configuration registers.
  * @base: The base pointer to the gpio configuration registers.
  * @group: The group register number for gpio interrupt support.
  * @irq_base: The base irq number.
@@ -221,6 +222,7 @@ struct samsung_gpio_chip {
 	struct gpio_chip	chip;
 	struct samsung_gpio_cfg	*config;
 	struct samsung_gpio_pm	*pm;
+	u32			offset;
 	void __iomem		*base;
 	int			irq_base;
 	int			group;

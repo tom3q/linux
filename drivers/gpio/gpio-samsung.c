@@ -32,7 +32,6 @@
 #include <asm/irq.h>
 
 #include <mach/map.h>
-#include <mach/regs-gpio.h>
 
 #include <plat/cpu.h>
 #include <plat/pm.h>
@@ -762,6 +761,8 @@ static void __init s3c24xx_gpiolib_add_chips(struct samsung_gpio_chip *chip,
 	struct gpio_chip *gc = &chip->chip;
 
 	for (i = 0 ; i < nr_chips; i++, chip++) {
+		u32 offset = chip->offset ? chip->offset : ((i) * 0x10);
+
 		/* skip banks not present on SoC */
 		if (chip->chip.base >= S3C_GPIO_END)
 			continue;
@@ -770,8 +771,8 @@ static void __init s3c24xx_gpiolib_add_chips(struct samsung_gpio_chip *chip,
 			chip->config = &s3c24xx_gpiocfg_default;
 		if (!chip->pm)
 			chip->pm = __gpio_pm(&samsung_gpio_pm_2bit);
-		if ((base != NULL) && (chip->base == NULL))
-			chip->base = base + ((i) * 0x10);
+
+		chip->base = base + offset;
 
 		if (!gc->direction_input)
 			gc->direction_input = samsung_gpiolib_2bit_input;
@@ -788,7 +789,9 @@ static void __init samsung_gpiolib_add_2bit_chips(struct samsung_gpio_chip *chip
 {
 	int i;
 
-	for (i = 0 ; i < nr_chips; i++, chip++) {
+	for (i = 7 ; i < nr_chips + 7; i++, chip++) {
+		u32 reg_offset = chip->offset ? chip->offset : i * offset;
+
 		chip->chip.direction_input = samsung_gpiolib_2bit_input;
 		chip->chip.direction_output = samsung_gpiolib_2bit_output;
 
@@ -796,8 +799,8 @@ static void __init samsung_gpiolib_add_2bit_chips(struct samsung_gpio_chip *chip
 			chip->config = &samsung_gpio_cfgs[7];
 		if (!chip->pm)
 			chip->pm = __gpio_pm(&samsung_gpio_pm_2bit);
-		if ((base != NULL) && (chip->base == NULL))
-			chip->base = base + ((i) * offset);
+
+		chip->base = base + reg_offset;
 
 		samsung_gpiolib_add(chip);
 	}
@@ -825,6 +828,8 @@ static void __init samsung_gpiolib_add_4bit_chips(struct samsung_gpio_chip *chip
 	int i;
 
 	for (i = 0 ; i < nr_chips; i++, chip++) {
+		u32 reg_offset = chip->offset ? chip->offset : i * 0x20;
+
 		chip->chip.direction_input = samsung_gpiolib_4bit_input;
 		chip->chip.direction_output = samsung_gpiolib_4bit_output;
 
@@ -832,8 +837,8 @@ static void __init samsung_gpiolib_add_4bit_chips(struct samsung_gpio_chip *chip
 			chip->config = &samsung_gpio_cfgs[2];
 		if (!chip->pm)
 			chip->pm = __gpio_pm(&samsung_gpio_pm_4bit);
-		if ((base != NULL) && (chip->base == NULL))
-			chip->base = base + ((i) * 0x20);
+
+		chip->base = base + reg_offset;
 
 		chip->bitmap_gpio_int = 0;
 
@@ -842,7 +847,8 @@ static void __init samsung_gpiolib_add_4bit_chips(struct samsung_gpio_chip *chip
 }
 
 static void __init samsung_gpiolib_add_4bit2_chips(struct samsung_gpio_chip *chip,
-						   int nr_chips)
+						   int nr_chips,
+						   void __iomem *base)
 {
 	for (; nr_chips > 0; nr_chips--, chip++) {
 		chip->chip.direction_input = samsung_gpiolib_4bit2_input;
@@ -852,6 +858,8 @@ static void __init samsung_gpiolib_add_4bit2_chips(struct samsung_gpio_chip *chi
 			chip->config = &samsung_gpio_cfgs[2];
 		if (!chip->pm)
 			chip->pm = __gpio_pm(&samsung_gpio_pm_4bit);
+
+		chip->base = base + chip->offset;
 
 		samsung_gpiolib_add(chip);
 	}
@@ -892,6 +900,11 @@ static int s3c64xx_gpiolib_lbank_to_irq(struct gpio_chip *chip, unsigned pin)
 	return pin >= 8 ? IRQ_EINT(16) + pin - 8 : -ENXIO;
 }
 #endif
+
+#define S3C2440_GPJCON		0x0d0
+#define S3C2443_GPKCON		0x0e0
+#define S3C2443_GPLCON		0x0f0
+#define S3C2443_GPMCON		0x100
 
 struct samsung_gpio_chip s3c24xx_gpios[] = {
 #ifdef CONFIG_PLAT_S3C24XX
@@ -960,7 +973,7 @@ struct samsung_gpio_chip s3c24xx_gpios[] = {
 	},
 		/* GPIOS for the S3C2443 and later devices. */
 	{
-		.base	= S3C2440_GPJCON,
+		.offset	= S3C2440_GPJCON,
 		.chip	= {
 			.base	= S3C2410_GPJ(0),
 			.owner	= THIS_MODULE,
@@ -968,7 +981,7 @@ struct samsung_gpio_chip s3c24xx_gpios[] = {
 			.ngpio	= 16,
 		},
 	}, {
-		.base	= S3C2443_GPKCON,
+		.offset	= S3C2443_GPKCON,
 		.chip	= {
 			.base	= S3C2410_GPK(0),
 			.owner	= THIS_MODULE,
@@ -976,7 +989,7 @@ struct samsung_gpio_chip s3c24xx_gpios[] = {
 			.ngpio	= 16,
 		},
 	}, {
-		.base	= S3C2443_GPLCON,
+		.offset	= S3C2443_GPLCON,
 		.chip	= {
 			.base	= S3C2410_GPL(0),
 			.owner	= THIS_MODULE,
@@ -984,7 +997,7 @@ struct samsung_gpio_chip s3c24xx_gpios[] = {
 			.ngpio	= 15,
 		},
 	}, {
-		.base	= S3C2443_GPMCON,
+		.offset	= S3C2443_GPMCON,
 		.chip	= {
 			.base	= S3C2410_GPM(0),
 			.owner	= THIS_MODULE,
@@ -1021,6 +1034,9 @@ struct samsung_gpio_chip s3c24xx_gpios[] = {
  * [2] BANK has two control registers, GPxCON0 and GPxCON1
  */
 
+#define S3C64XX_GPG_BASE	0x00c0
+#define S3C64XX_GPM_BASE	0x0820
+
 static struct samsung_gpio_chip s3c64xx_gpios_4bit[] = {
 #ifdef CONFIG_ARCH_S3C64XX
 	{
@@ -1055,14 +1071,14 @@ static struct samsung_gpio_chip s3c64xx_gpios_4bit[] = {
 			.label	= "GPE",
 		},
 	}, {
-		.base	= S3C64XX_GPG_BASE,
+		.offset	= S3C64XX_GPG_BASE,
 		.chip	= {
 			.base	= S3C64XX_GPG(0),
 			.ngpio	= S3C64XX_GPIO_G_NR,
 			.label	= "GPG",
 		},
 	}, {
-		.base	= S3C64XX_GPM_BASE,
+		.offset	= S3C64XX_GPM_BASE,
 		.config	= &samsung_gpio_cfgs[1],
 		.chip	= {
 			.base	= S3C64XX_GPM(0),
@@ -1074,17 +1090,21 @@ static struct samsung_gpio_chip s3c64xx_gpios_4bit[] = {
 #endif
 };
 
+#define S3C64XX_GPH_BASE	0x00e0
+#define S3C64XX_GPK_BASE	0x0800
+#define S3C64XX_GPL_BASE	0x0810
+
 static struct samsung_gpio_chip s3c64xx_gpios_4bit2[] = {
 #ifdef CONFIG_ARCH_S3C64XX
 	{
-		.base	= S3C64XX_GPH_BASE + 0x4,
+		.offset	= S3C64XX_GPH_BASE + 0x4,
 		.chip	= {
 			.base	= S3C64XX_GPH(0),
 			.ngpio	= S3C64XX_GPIO_H_NR,
 			.label	= "GPH",
 		},
 	}, {
-		.base	= S3C64XX_GPK_BASE + 0x4,
+		.offset	= S3C64XX_GPK_BASE + 0x4,
 		.config	= &samsung_gpio_cfgs[0],
 		.chip	= {
 			.base	= S3C64XX_GPK(0),
@@ -1092,7 +1112,7 @@ static struct samsung_gpio_chip s3c64xx_gpios_4bit2[] = {
 			.label	= "GPK",
 		},
 	}, {
-		.base	= S3C64XX_GPL_BASE + 0x4,
+		.offset	= S3C64XX_GPL_BASE + 0x4,
 		.config	= &samsung_gpio_cfgs[1],
 		.chip	= {
 			.base	= S3C64XX_GPL(0),
@@ -1104,10 +1124,13 @@ static struct samsung_gpio_chip s3c64xx_gpios_4bit2[] = {
 #endif
 };
 
+#define S3C64XX_GPF_BASE	0x00a0
+#define S3C64XX_GPN_BASE	0x0830
+
 static struct samsung_gpio_chip s3c64xx_gpios_2bit[] = {
 #ifdef CONFIG_ARCH_S3C64XX
 	{
-		.base	= S3C64XX_GPF_BASE,
+		.offset	= S3C64XX_GPF_BASE,
 		.config	= &samsung_gpio_cfgs[6],
 		.chip	= {
 			.base	= S3C64XX_GPF(0),
@@ -1150,7 +1173,7 @@ static struct samsung_gpio_chip s3c64xx_gpios_2bit[] = {
 			.label	= "GPQ",
 		},
 	}, {
-		.base	= S3C64XX_GPN_BASE,
+		.offset	= S3C64XX_GPN_BASE,
 		.irq_base = IRQ_EINT(0),
 		.config	= &samsung_gpio_cfgs[5],
 		.chip	= {
@@ -1183,12 +1206,13 @@ static __init int samsung_gpiolib_init(void)
 	} else if (soc_is_s3c64xx()) {
 		samsung_gpiolib_add_2bit_chips(s3c64xx_gpios_2bit,
 				ARRAY_SIZE(s3c64xx_gpios_2bit),
-				S3C64XX_VA_GPIO + 0xE0, 0x20);
+				S3C64XX_VA_GPIO, 0x20);
 		samsung_gpiolib_add_4bit_chips(s3c64xx_gpios_4bit,
 				ARRAY_SIZE(s3c64xx_gpios_4bit),
 				S3C64XX_VA_GPIO);
 		samsung_gpiolib_add_4bit2_chips(s3c64xx_gpios_4bit2,
-				ARRAY_SIZE(s3c64xx_gpios_4bit2));
+				ARRAY_SIZE(s3c64xx_gpios_4bit2),
+				S3C64XX_VA_GPIO);
 	} else {
 		WARN(1, "Unknown SoC in gpio-samsung, no GPIOs added\n");
 		return -ENODEV;
