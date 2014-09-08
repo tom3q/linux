@@ -281,7 +281,7 @@ static loff_t f2fs_seek_block(struct file *file, loff_t offset, int whence)
 	mutex_lock(&inode->i_mutex);
 
 	isize = i_size_read(inode);
-	if (offset >= isize)
+	if (offset >= isize || offset < 0)
 		goto fail;
 
 	/* handle inline data case */
