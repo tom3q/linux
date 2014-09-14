@@ -191,7 +191,6 @@ static void android_enable(struct android_dev *dev)
 	if (--dev->disable_depth == 0) {
 		usb_add_config(cdev, &android_config_driver,
 					android_bind_config);
-		usb_gadget_connect(cdev->gadget);
 	}
 }
 
@@ -200,7 +199,6 @@ static void android_disable(struct android_dev *dev)
 	struct usb_composite_dev *cdev = dev->cdev;
 
 	if (dev->disable_depth++ == 0) {
-		usb_gadget_disconnect(cdev->gadget);
 		/* Cancel pending control requests */
 		usb_ep_dequeue(cdev->gadget->ep0, cdev->req);
 		usb_remove_config(cdev, &android_config_driver);
@@ -1422,12 +1420,6 @@ static int android_bind(struct usb_composite_dev *cdev)
 	struct android_dev *dev = _android_dev;
 	struct usb_gadget	*gadget = cdev->gadget;
 	int			id, ret;
-
-	/*
-	 * Start disconnected. Userspace will connect the gadget once
-	 * it is done configuring the functions.
-	 */
-	usb_gadget_disconnect(gadget);
 
 	ret = android_init_functions(dev->functions, cdev);
 	if (ret)
