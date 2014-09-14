@@ -32,7 +32,12 @@
 	};
 
 	chosen {
-		bootargs = "console=ttySAC1,115200n8 console=tty1 root=/dev/mmcblk0p1 rw rootwait ignore_loglevel earlyprintk g_ether.dev_addr=02:01:02:03:04:05 g_ether.host_addr=06:07:08:09:0a:0b";
+		bootargs = "console=ttySAC1,115200n8 console=tty1 \
+				root=/dev/mmcblk0p1 rw rootwait \
+				ignore_loglevel earlyprintk \
+				g_ether.dev_addr=02:01:02:03:04:05 \
+				g_ether.host_addr=06:07:08:09:0a:0b \
+				init=/init androidboot.hardware=apollo";
 	};
 
 	memory {
