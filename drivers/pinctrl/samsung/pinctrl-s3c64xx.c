@@ -305,6 +305,16 @@ static void s3c64xx_irq_set_function(struct samsung_pinctrl_drv_data *d,
  * Functions for EINT GPIO configuration (EINT groups 1-9)
  */
 
+static void s3c64xx_gpio_irq_ack(struct irq_data *irqd)
+{
+	struct samsung_pin_bank *bank = irq_data_get_irq_chip_data(irqd);
+	struct samsung_pinctrl_drv_data *d = bank->drvdata;
+	unsigned char index = EINT_OFFS(bank->eint_offset) + irqd->hwirq;
+	void __iomem *reg = d->virt_base + EINTPEND_REG(bank->eint_offset);
+
+	writel(1 << index, reg);
+}
+
 static inline void s3c64xx_gpio_irq_set_mask(struct irq_data *irqd, bool mask)
 {
 	struct samsung_pin_bank *bank = irq_data_get_irq_chip_data(irqd);
@@ -328,22 +338,22 @@ static inline void s3c64xx_gpio_irq_set_mask(struct irq_data *irqd, bool mask)
 
 static void s3c64xx_gpio_irq_unmask(struct irq_data *irqd)
 {
+	/*
+	 * Ack level interrupts right before unmask.
+	 *
+	 * This is a workaround for the hardware which latches level interrupts
+	 * even if masked. If the interrupt signal is still active, it will be
+	 * latched again and handled properly.
+	 */
+	if (irqd_get_trigger_type(irqd) & IRQ_TYPE_LEVEL_MASK)
+		s3c64xx_gpio_irq_ack(irqd);
+
 	s3c64xx_gpio_irq_set_mask(irqd, false);
 }
 
 static void s3c64xx_gpio_irq_mask(struct irq_data *irqd)
 {
 	s3c64xx_gpio_irq_set_mask(irqd, true);
-}
-
-static void s3c64xx_gpio_irq_ack(struct irq_data *irqd)
-{
-	struct samsung_pin_bank *bank = irq_data_get_irq_chip_data(irqd);
-	struct samsung_pinctrl_drv_data *d = bank->drvdata;
-	unsigned char index = EINT_OFFS(bank->eint_offset) + irqd->hwirq;
-	void __iomem *reg = d->virt_base + EINTPEND_REG(bank->eint_offset);
-
-	writel(1 << index, reg);
 }
 
 static int s3c64xx_gpio_irq_set_type(struct irq_data *irqd, unsigned int type)
@@ -526,6 +536,16 @@ static int s3c64xx_eint_gpio_init(struct samsung_pinctrl_drv_data *d)
  * Functions for configuration of EINT0 wake-up interrupts
  */
 
+static void s3c64xx_eint0_irq_ack(struct irq_data *irqd)
+{
+	struct s3c64xx_eint0_domain_data *ddata =
+					irq_data_get_irq_chip_data(irqd);
+	struct samsung_pinctrl_drv_data *d = ddata->bank->drvdata;
+
+	writel(1 << ddata->eints[irqd->hwirq],
+					d->virt_base + EINT0PEND_REG);
+}
+
 static inline void s3c64xx_eint0_irq_set_mask(struct irq_data *irqd, bool mask)
 {
 	struct s3c64xx_eint0_domain_data *ddata =
@@ -548,22 +568,22 @@ static inline void s3c64xx_eint0_irq_set_mask(struct irq_data *irqd, bool mask)
 
 static void s3c64xx_eint0_irq_unmask(struct irq_data *irqd)
 {
+	/*
+	 * Ack level interrupts right before unmask.
+	 *
+	 * This is a workaround for the hardware which latches level interrupts
+	 * even if masked. If the interrupt signal is still active, it will be
+	 * latched again and handled properly.
+	 */
+	if (irqd_get_trigger_type(irqd) & IRQ_TYPE_LEVEL_MASK)
+		s3c64xx_eint0_irq_ack(irqd);
+
 	s3c64xx_eint0_irq_set_mask(irqd, false);
 }
 
 static void s3c64xx_eint0_irq_mask(struct irq_data *irqd)
 {
 	s3c64xx_eint0_irq_set_mask(irqd, true);
-}
-
-static void s3c64xx_eint0_irq_ack(struct irq_data *irqd)
-{
-	struct s3c64xx_eint0_domain_data *ddata =
-					irq_data_get_irq_chip_data(irqd);
-	struct samsung_pinctrl_drv_data *d = ddata->bank->drvdata;
-
-	writel(1 << ddata->eints[irqd->hwirq],
-					d->virt_base + EINT0PEND_REG);
 }
 
 static int s3c64xx_eint0_irq_set_type(struct irq_data *irqd, unsigned int type)
