@@ -311,7 +311,10 @@ static inline void s3c64xx_gpio_irq_set_mask(struct irq_data *irqd, bool mask)
 	struct samsung_pinctrl_drv_data *d = bank->drvdata;
 	unsigned char index = EINT_OFFS(bank->eint_offset) + irqd->hwirq;
 	void __iomem *reg = d->virt_base + EINTMASK_REG(bank->eint_offset);
+	unsigned long flags;
 	u32 val;
+
+	spin_lock_irqsave(&bank->slock, flags);
 
 	val = readl(reg);
 	if (mask)
@@ -319,6 +322,8 @@ static inline void s3c64xx_gpio_irq_set_mask(struct irq_data *irqd, bool mask)
 	else
 		val &= ~(1 << index);
 	writel(val, reg);
+
+	spin_unlock_irqrestore(&bank->slock, flags);
 }
 
 static void s3c64xx_gpio_irq_unmask(struct irq_data *irqd)
@@ -345,6 +350,7 @@ static int s3c64xx_gpio_irq_set_type(struct irq_data *irqd, unsigned int type)
 {
 	struct samsung_pin_bank *bank = irq_data_get_irq_chip_data(irqd);
 	struct samsung_pinctrl_drv_data *d = bank->drvdata;
+	unsigned long flags;
 	void __iomem *reg;
 	int trigger;
 	u8 shift;
@@ -363,10 +369,14 @@ static int s3c64xx_gpio_irq_set_type(struct irq_data *irqd, unsigned int type)
 	shift = EINT_OFFS(bank->eint_offset) + irqd->hwirq;
 	shift = 4 * (shift / 4); /* 4 EINTs per trigger selector */
 
+	spin_lock_irqsave(&bank->slock, flags);
+
 	val = readl(reg);
 	val &= ~(EINT_CON_MASK << shift);
 	val |= trigger << shift;
 	writel(val, reg);
+
+	spin_unlock_irqrestore(&bank->slock, flags);
 
 	s3c64xx_irq_set_function(d, bank, irqd->hwirq);
 
@@ -521,7 +531,10 @@ static inline void s3c64xx_eint0_irq_set_mask(struct irq_data *irqd, bool mask)
 	struct s3c64xx_eint0_domain_data *ddata =
 					irq_data_get_irq_chip_data(irqd);
 	struct samsung_pinctrl_drv_data *d = ddata->bank->drvdata;
+	unsigned long flags;
 	u32 val;
+
+	spin_lock_irqsave(&bank->slock, flags);
 
 	val = readl(d->virt_base + EINT0MASK_REG);
 	if (mask)
@@ -529,6 +542,8 @@ static inline void s3c64xx_eint0_irq_set_mask(struct irq_data *irqd, bool mask)
 	else
 		val &= ~(1 << ddata->eints[irqd->hwirq]);
 	writel(val, d->virt_base + EINT0MASK_REG);
+
+	spin_unlock_irqrestore(&bank->slock, flags);
 }
 
 static void s3c64xx_eint0_irq_unmask(struct irq_data *irqd)
@@ -557,6 +572,7 @@ static int s3c64xx_eint0_irq_set_type(struct irq_data *irqd, unsigned int type)
 					irq_data_get_irq_chip_data(irqd);
 	struct samsung_pin_bank *bank = ddata->bank;
 	struct samsung_pinctrl_drv_data *d = bank->drvdata;
+	unsigned long flags;
 	void __iomem *reg;
 	int trigger;
 	u8 shift;
@@ -579,10 +595,14 @@ static int s3c64xx_eint0_irq_set_type(struct irq_data *irqd, unsigned int type)
 	}
 	shift = EINT_CON_LEN * (shift / 2);
 
+	spin_lock_irqsave(&bank->slock, flags);
+
 	val = readl(reg);
 	val &= ~(EINT_CON_MASK << shift);
 	val |= trigger << shift;
 	writel(val, reg);
+
+	spin_unlock_irqrestore(&bank->slock, flags);
 
 	s3c64xx_irq_set_function(d, bank, irqd->hwirq);
 
