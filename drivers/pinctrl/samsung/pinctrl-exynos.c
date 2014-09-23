@@ -222,8 +222,7 @@ static const struct irq_domain_ops exynos_gpio_irqd_ops = {
 static irqreturn_t exynos_eint_gpio_irq(int irq, void *data)
 {
 	struct samsung_pinctrl_drv_data *d = data;
-	struct samsung_pin_ctrl *ctrl = d->ctrl;
-	struct samsung_pin_bank *bank = ctrl->pin_banks;
+	struct samsung_pin_bank *bank = d->pin_banks;
 	unsigned int svc, group, pin, virq;
 
 	svc = readl(d->virt_base + EXYNOS_SVC_OFFSET);
@@ -270,8 +269,8 @@ static int exynos_eint_gpio_init(struct samsung_pinctrl_drv_data *d)
 		return -ENXIO;
 	}
 
-	bank = d->ctrl->pin_banks;
-	for (i = 0; i < d->ctrl->nr_banks; ++i, ++bank) {
+	bank = d->pin_banks;
+	for (i = 0; i < d->nr_banks; ++i, ++bank) {
 		if (bank->eint_type != EINT_TYPE_GPIO)
 			continue;
 		bank->irq_domain = irq_domain_add_linear(bank->of_node,
@@ -441,8 +440,8 @@ static int exynos_eint_wkup_init(struct samsung_pinctrl_drv_data *d)
 	if (!wkup_np)
 		return -ENODEV;
 
-	bank = d->ctrl->pin_banks;
-	for (i = 0; i < d->ctrl->nr_banks; ++i, ++bank) {
+	bank = d->pin_banks;
+	for (i = 0; i < d->nr_banks; ++i, ++bank) {
 		if (bank->eint_type != EINT_TYPE_WKUP)
 			continue;
 
@@ -499,9 +498,9 @@ static int exynos_eint_wkup_init(struct samsung_pinctrl_drv_data *d)
 	irq_set_chained_handler(irq, exynos_irq_demux_eint16_31);
 	irq_set_handler_data(irq, muxed_data);
 
-	bank = d->ctrl->pin_banks;
+	bank = d->pin_banks;
 	idx = 0;
-	for (i = 0; i < d->ctrl->nr_banks; ++i, ++bank) {
+	for (i = 0; i < d->nr_banks; ++i, ++bank) {
 		if (bank->eint_type != EINT_TYPE_WKUP_MUX)
 			continue;
 
@@ -533,11 +532,10 @@ static void exynos_pinctrl_suspend_bank(
 
 static void exynos_pinctrl_suspend(struct samsung_pinctrl_drv_data *drvdata)
 {
-	struct samsung_pin_ctrl *ctrl = drvdata->ctrl;
-	struct samsung_pin_bank *bank = ctrl->pin_banks;
+	struct samsung_pin_bank *bank = drvdata->pin_banks;
 	int i;
 
-	for (i = 0; i < ctrl->nr_banks; ++i, ++bank)
+	for (i = 0; i < drvdata->nr_banks; ++i, ++bank)
 		if (bank->eint_type == EINT_TYPE_GPIO)
 			exynos_pinctrl_suspend_bank(drvdata, bank);
 }
@@ -569,11 +567,10 @@ static void exynos_pinctrl_resume_bank(
 
 static void exynos_pinctrl_resume(struct samsung_pinctrl_drv_data *drvdata)
 {
-	struct samsung_pin_ctrl *ctrl = drvdata->ctrl;
-	struct samsung_pin_bank *bank = ctrl->pin_banks;
+	struct samsung_pin_bank *bank = drvdata->pin_banks;
 	int i;
 
-	for (i = 0; i < ctrl->nr_banks; ++i, ++bank)
+	for (i = 0; i < drvdata->nr_banks; ++i, ++bank)
 		if (bank->eint_type == EINT_TYPE_GPIO)
 			exynos_pinctrl_resume_bank(drvdata, bank);
 }
@@ -616,7 +613,7 @@ static struct samsung_pin_bank s5pv210_pin_bank[] = {
 	EXYNOS_PIN_BANK_EINTW(8, 0xc60, "gph3", 0x0c),
 };
 
-struct samsung_pin_ctrl s5pv210_pin_ctrl[] = {
+const struct samsung_pin_ctrl s5pv210_pin_ctrl[] __initconst = {
 	{
 		/* pin-controller instance 0 data */
 		.pin_banks	= s5pv210_pin_bank,
@@ -663,7 +660,7 @@ static struct samsung_pin_bank exynos3250_pin_banks1[] = {
  * Samsung pinctrl driver data for Exynos3250 SoC. Exynos3250 SoC includes
  * two gpio/pin-mux/pinconfig controllers.
  */
-struct samsung_pin_ctrl exynos3250_pin_ctrl[] = {
+const struct samsung_pin_ctrl exynos3250_pin_ctrl[] __initconst = {
 	{
 		/* pin-controller instance 0 data */
 		.pin_banks	= exynos3250_pin_banks0,
@@ -735,7 +732,7 @@ static struct samsung_pin_bank exynos4210_pin_banks2[] = {
  * Samsung pinctrl driver data for Exynos4210 SoC. Exynos4210 SoC includes
  * three gpio/pin-mux/pinconfig controllers.
  */
-struct samsung_pin_ctrl exynos4210_pin_ctrl[] = {
+const struct samsung_pin_ctrl exynos4210_pin_ctrl[] __initconst = {
 	{
 		/* pin-controller instance 0 data */
 		.pin_banks	= exynos4210_pin_banks0,
@@ -820,7 +817,7 @@ static struct samsung_pin_bank exynos4x12_pin_banks3[] = {
  * Samsung pinctrl driver data for Exynos4x12 SoC. Exynos4x12 SoC includes
  * four gpio/pin-mux/pinconfig controllers.
  */
-struct samsung_pin_ctrl exynos4x12_pin_ctrl[] = {
+const struct samsung_pin_ctrl exynos4x12_pin_ctrl[] __initconst = {
 	{
 		/* pin-controller instance 0 data */
 		.pin_banks	= exynos4x12_pin_banks0,
@@ -913,7 +910,7 @@ static struct samsung_pin_bank exynos5250_pin_banks3[] = {
  * Samsung pinctrl driver data for Exynos5250 SoC. Exynos5250 SoC includes
  * four gpio/pin-mux/pinconfig controllers.
  */
-struct samsung_pin_ctrl exynos5250_pin_ctrl[] = {
+const struct samsung_pin_ctrl exynos5250_pin_ctrl[] __initconst = {
 	{
 		/* pin-controller instance 0 data */
 		.pin_banks	= exynos5250_pin_banks0,
@@ -990,7 +987,7 @@ static struct samsung_pin_bank exynos5260_pin_banks2[] = {
  * Samsung pinctrl driver data for Exynos5260 SoC. Exynos5260 SoC includes
  * three gpio/pin-mux/pinconfig controllers.
  */
-struct samsung_pin_ctrl exynos5260_pin_ctrl[] = {
+const struct samsung_pin_ctrl exynos5260_pin_ctrl[] __initconst = {
 	{
 		/* pin-controller instance 0 data */
 		.pin_banks	= exynos5260_pin_banks0,
@@ -1070,7 +1067,7 @@ static struct samsung_pin_bank exynos5420_pin_banks4[] = {
  * Samsung pinctrl driver data for Exynos5420 SoC. Exynos5420 SoC includes
  * four gpio/pin-mux/pinconfig controllers.
  */
-struct samsung_pin_ctrl exynos5420_pin_ctrl[] = {
+const struct samsung_pin_ctrl exynos5420_pin_ctrl[] __initconst = {
 	{
 		/* pin-controller instance 0 data */
 		.pin_banks	= exynos5420_pin_banks0,
