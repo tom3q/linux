@@ -573,7 +573,7 @@ static struct samsung_pin_bank s3c2412_pin_banks[] = {
 	PIN_BANK_2BIT(13, 0x080, "gpj"),
 };
 
-struct samsung_pin_ctrl s3c2412_pin_ctrl[] = {
+const struct samsung_pin_ctrl s3c2412_pin_ctrl[] __initconst = {
 	{
 		.pin_banks	= s3c2412_pin_banks,
 		.nr_banks	= ARRAY_SIZE(s3c2412_pin_banks),
@@ -596,7 +596,7 @@ static struct samsung_pin_bank s3c2416_pin_banks[] = {
 	PIN_BANK_2BIT(2, 0x100, "gpm"),
 };
 
-struct samsung_pin_ctrl s3c2416_pin_ctrl[] = {
+const struct samsung_pin_ctrl s3c2416_pin_ctrl[] __initconst = {
 	{
 		.pin_banks	= s3c2416_pin_banks,
 		.nr_banks	= ARRAY_SIZE(s3c2416_pin_banks),
@@ -617,7 +617,7 @@ static struct samsung_pin_bank s3c2440_pin_banks[] = {
 	PIN_BANK_2BIT(13, 0x0d0, "gpj"),
 };
 
-struct samsung_pin_ctrl s3c2440_pin_ctrl[] = {
+const struct samsung_pin_ctrl s3c2440_pin_ctrl[] __initconst = {
 	{
 		.pin_banks	= s3c2440_pin_banks,
 		.nr_banks	= ARRAY_SIZE(s3c2440_pin_banks),
@@ -641,7 +641,7 @@ static struct samsung_pin_bank s3c2450_pin_banks[] = {
 	PIN_BANK_2BIT(2, 0x100, "gpm"),
 };
 
-struct samsung_pin_ctrl s3c2450_pin_ctrl[] = {
+const struct samsung_pin_ctrl s3c2450_pin_ctrl[] __initconst = {
 	{
 		.pin_banks	= s3c2450_pin_banks,
 		.nr_banks	= ARRAY_SIZE(s3c2450_pin_banks),
