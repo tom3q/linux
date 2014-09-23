@@ -46,12 +46,12 @@ static inline struct exynos_irq_chip *to_exynos_irq_chip(struct irq_chip *chip)
 	return container_of(chip, struct exynos_irq_chip, chip);
 }
 
-static struct samsung_pin_bank_type bank_type_off = {
+static const struct samsung_pin_bank_type bank_type_off = {
 	.fld_width = { 4, 1, 2, 2, 2, 2, },
 	.reg_offset = { 0x00, 0x04, 0x08, 0x0c, 0x10, 0x14, },
 };
 
-static struct samsung_pin_bank_type bank_type_alive = {
+static const struct samsung_pin_bank_type bank_type_alive = {
 	.fld_width = { 4, 1, 2, 2, },
 	.reg_offset = { 0x00, 0x04, 0x08, 0x0c, },
 };
@@ -127,7 +127,7 @@ static int exynos_irq_set_type(struct irq_data *irqd, unsigned int type)
 	struct irq_chip *chip = irq_data_get_irq_chip(irqd);
 	struct exynos_irq_chip *our_chip = to_exynos_irq_chip(chip);
 	struct samsung_pin_bank *bank = irq_data_get_irq_chip_data(irqd);
-	struct samsung_pin_bank_type *bank_type = bank->type;
+	const struct samsung_pin_bank_type *bank_type = bank->type;
 	struct samsung_pinctrl_drv_data *d = bank->drvdata;
 	unsigned int pin = irqd->hwirq;
 	unsigned int shift = EXYNOS_EINT_CON_LEN * pin;
