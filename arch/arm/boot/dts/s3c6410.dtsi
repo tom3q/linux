@@ -39,11 +39,11 @@
 &soc {
 	g3d: gpu@72000000 {
 		compatible = "samsung,s3c6410-g3d";
-		reg = <0x72000000 0x80000>;
+		reg = <0x72000000 0x80000>, <0x75100000 0x10000>;
 		interrupt-parent = <&vic0>;
 		interrupts = <8>;
-		clock-names = "bus-clk";
-		clocks = <&clocks HCLK_3DSE>;
+		clock-names = "bus-clk", "dma-clk";
+		clocks = <&clocks HCLK_3DSE>, <&clocks HCLK_DMA1>;
 		power-domains = <&clocks DOMAIN_G>;
 	};
 
