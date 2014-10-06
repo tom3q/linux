@@ -359,7 +359,8 @@ enum g3d_request_id {
 	G3D_NUM_REQUESTS
 };
 
-#define G3D_REQUEST_STRICT_SIZE_CHECK	(1 << 3)
+#define G3D_REQUEST_STRICT_SIZE_CHECK	(1 << 0)
+#define G3D_REQUEST_NON_ATOMIC		(1 << 1)
 
 static inline uint32_t req_length(const uint32_t *req)
 {
@@ -511,6 +512,7 @@ struct g3d_context {
 
 	unsigned long state;
 	unsigned int dirty_level;
+	bool non_atomic;
 };
 
 struct g3d_submit {
@@ -1198,6 +1200,9 @@ static inline int g3d_request_handle(struct g3d_submit *submit,
 	if (req_info->handle)
 		ret = req_info->handle(submit, req);
 
+	if (req_info->flags & G3D_REQUEST_NON_ATOMIC)
+		ctx->non_atomic = 1;
+
 	return ret;
 }
 
@@ -1294,6 +1299,9 @@ static int g3d_prepare_draw(struct g3d_context *ctx, struct g3d_submit *submit,
 	unsigned int flush_level;
 	int ret;
 
+	if (in_interrupt() && ctx->non_atomic)
+		return -EINVAL;
+
 	submit->state_update_end = req;
 
 	g3d_state_update(ctx, submit);
@@ -1318,9 +1326,6 @@ static int g3d_prepare_draw(struct g3d_context *ctx, struct g3d_submit *submit,
 		flush_level = ctx->dirty_level;
 	}
 
-	if (in_interrupt() && flush_level >= G3D_FLUSH_VERTEX_SHADER)
-		return -EINVAL;
-
 	ret = g3d_flush_pipeline(g3d, flush_level, false);
 	if (ret == -EAGAIN)
 		return ret;
@@ -1344,6 +1349,7 @@ static int g3d_prepare_draw(struct g3d_context *ctx, struct g3d_submit *submit,
 	ctx->dirty_level = G3D_FLUSH_HOST_FIFO;
 	submit->apply_start = req_data(req) + req_length(req);
 	g3d->last_ctx = ctx;
+	ctx->non_atomic = 0;
 
 	return 0;
 }
@@ -2622,7 +2628,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_REQUESTS] = {
 		.validate = g3d_validate_shader_program,
 		.update_state = g3d_process_shader_program,
 		.apply = g3d_apply_shader_program,
-		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK | G3D_REQUEST_NON_ATOMIC,
 		.length = NUM_G3D_SHADER_PROG_WORDS,
 	},
 	[G3D_REQUEST_SHADER_DATA] = {
@@ -2635,21 +2641,21 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_REQUESTS] = {
 		.validate = g3d_validate_texture,
 		.update_state = g3d_process_texture,
 		.apply = g3d_apply_texture,
-		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK | G3D_REQUEST_NON_ATOMIC,
 		.length = NUM_G3D_TEXTURE_WORDS,
 	},
 	[G3D_REQUEST_COLORBUFFER] = {
 		.validate = g3d_validate_colorbuffer,
 		.update_state = g3d_process_colorbuffer,
 		.apply = g3d_apply_colorbuffer,
-		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK | G3D_REQUEST_NON_ATOMIC,
 		.length = NUM_G3D_COLORBUFFER_WORDS,
 	},
 	[G3D_REQUEST_DEPTHBUFFER] = {
 		.validate = g3d_validate_depthbuffer,
 		.update_state = g3d_process_depthbuffer,
 		.apply = g3d_apply_depthbuffer,
-		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK | G3D_REQUEST_NON_ATOMIC,
 		.length = NUM_G3D_DEPTHBUFFER_WORDS,
 	},
 	[G3D_REQUEST_DRAW] = {
@@ -2668,7 +2674,7 @@ static const struct g3d_request_info g3d_requests[G3D_NUM_REQUESTS] = {
 		.validate = g3d_validate_vtx_texture,
 		.update_state = g3d_process_vtx_texture,
 		.apply = g3d_apply_vtx_texture,
-		.flags = G3D_REQUEST_STRICT_SIZE_CHECK,
+		.flags = G3D_REQUEST_STRICT_SIZE_CHECK | G3D_REQUEST_NON_ATOMIC,
 		.length = NUM_G3D_VTX_TEXTURE_WORDS,
 	}
 };
