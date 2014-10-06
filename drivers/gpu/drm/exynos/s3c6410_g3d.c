@@ -102,6 +102,26 @@ enum g3d_shader_data_type {
 
 #define G3D_VERTEX_BUFFER_SIZE		SZ_4K
 
+#define G3D_NUM_DMA_LLI_ENTRIES		128
+#define G3D_DMA_LLI_WORDS		8
+#define G3D_DMA_LLI_SIZE		(G3D_DMA_LLI_WORDS * sizeof(uint32_t))
+
+#define G3D_DMA_LLI_SRC_WORD		0
+#define G3D_DMA_LLI_DST_WORD		1
+#define G3D_DMA_LLI_NEXT_WORD		2
+#define G3D_DMA_LLI_CTRL0_WORD		3
+#define G3D_DMA_LLI_CTRL1_WORD		4
+#define G3D_DMA_LLI_CONST_WORD		5
+
+#define G3D_DMA_INTCLR_REG		0x008
+#define G3D_DMA_CFG_REG			0x030
+#define G3D_DMA_SRC_REG			0x100
+#define G3D_DMA_DST_REG			0x104
+#define G3D_DMA_NEXT_REG		0x108
+#define G3D_DMA_CTRL0_REG		0x10c
+#define G3D_DMA_CTRL1_REG		0x110
+#define G3D_DMA_CCFG_REG		0x114
+
 /*
  * Registers
  */
@@ -418,6 +438,16 @@ struct g3d_drvdata {
 	unsigned int fb_timestamp;
 
 	struct g3d_submit *submit;
+
+	dma_addr_t base_phys;
+	void __iomem *dma_base;
+	struct clk *dma_clock;
+	uint32_t dma_flush_mask;
+	bool dma_enabled;
+	bool dma_dirty;
+	dma_addr_t dma_lli_phys;
+	uint32_t *dma_lli;
+	unsigned int lli_used;
 };
 
 enum g3d_context_state_bits {
@@ -766,6 +796,158 @@ static void g3d_enable_debug(struct g3d_drvdata *g3d)
 }
 #endif
 
+static inline bool g3d_pipeline_idle(struct g3d_drvdata *g3d, uint32_t mask)
+{
+	uint32_t stat = g3d_read(g3d, G3D_FGGB_PIPESTAT_REG);
+
+	dev_dbg_pipe(g3d->dev, "%s: stat = %08x\n", __func__, stat);
+	return !(stat & mask);
+}
+
+/*
+ * DMA support (Experimental, PL080S-only)
+ */
+
+static inline unsigned int g3d_dma_free_lli(struct g3d_drvdata *g3d)
+{
+	return G3D_NUM_DMA_LLI_ENTRIES - g3d->lli_used;
+}
+
+static void g3d_dma_flush(struct g3d_drvdata *g3d)
+{
+	if (!g3d->lli_used || g3d->dma_dirty)
+		return;
+
+	g3d->dma_dirty = true;
+}
+
+static inline bool g3d_dma_idle(struct g3d_drvdata *g3d)
+{
+	return !(readl(g3d->dma_base + G3D_DMA_CCFG_REG) & 0x1);
+}
+
+static inline bool g3d_idle_condition_dma(struct g3d_drvdata *g3d,
+					  uint32_t mask)
+{
+	return (g3d_dma_idle(g3d) && g3d_pipeline_idle(g3d, mask))
+		|| !list_empty(&g3d->submit_list);
+}
+
+static void g3d_dma_set(struct g3d_drvdata *g3d, uint32_t reg,
+			uint32_t val, uint32_t num_words);
+
+static int g3d_dma_wait(struct g3d_drvdata *g3d, uint32_t mask, bool idle)
+{
+	dev_dbg_trace(g3d->dev, "%s\n", __func__);
+
+	if (!g3d->dma_dirty)
+		return 0;
+
+	dev_dbg_trace(g3d->dev, "%s\n", __func__);
+
+	g3d_dma_set(g3d, G3D_FGGB_PIPEMASK_REG, mask, 1);
+	g3d_dma_set(g3d, G3D_FGGB_INTMASK_REG, 1, 1);
+
+	writel(0x1, g3d->dma_base + G3D_DMA_CFG_REG);
+
+	writel_relaxed(g3d->dma_lli[G3D_DMA_LLI_SRC_WORD],
+			g3d->dma_base + G3D_DMA_SRC_REG);
+	writel_relaxed(g3d->dma_lli[G3D_DMA_LLI_DST_WORD],
+			g3d->dma_base + G3D_DMA_DST_REG);
+	writel_relaxed(g3d->dma_lli[G3D_DMA_LLI_NEXT_WORD],
+			g3d->dma_base + G3D_DMA_NEXT_REG);
+	writel_relaxed(g3d->dma_lli[G3D_DMA_LLI_CTRL0_WORD],
+			g3d->dma_base + G3D_DMA_CTRL0_REG);
+	writel_relaxed(g3d->dma_lli[G3D_DMA_LLI_CTRL1_WORD],
+			g3d->dma_base + G3D_DMA_CTRL1_REG);
+
+	g3d->lli_used = 0;
+	g3d->dma_dirty = false;
+	g3d->dma_flush_mask = mask;
+
+	if (in_interrupt()) {
+		mod_timer(&g3d->watchdog_timer, jiffies + G3D_FLUSH_TIMEOUT);
+		writel(0x8001, g3d->dma_base + G3D_DMA_CCFG_REG);
+		return -EAGAIN;
+	}
+
+	init_completion(&g3d->completion);
+	mod_timer(&g3d->watchdog_timer, jiffies + G3D_FLUSH_TIMEOUT);
+	writel(0x8001, g3d->dma_base + G3D_DMA_CCFG_REG);
+
+	if (idle)
+		wait_event(g3d->idle_wq, g3d_idle_condition_dma(g3d, mask));
+	else
+		wait_for_completion(&g3d->completion);
+
+	dev_dbg_events(g3d->dev, "%s:%d idle/flush_wq wake-up\n",
+			__func__, __LINE__);
+
+	return -EAGAIN;
+}
+
+static void g3d_dma_set(struct g3d_drvdata *g3d, uint32_t reg,
+			uint32_t val, uint32_t num_words)
+{
+	dma_addr_t lli_phys;
+	uint32_t *lli;
+
+	if (!g3d_dma_free_lli(g3d)) {
+		BUG_ON(in_interrupt());
+
+		g3d_dma_flush(g3d);
+		g3d_dma_wait(g3d, 0, false);
+	}
+
+	lli = &g3d->dma_lli[g3d->lli_used * G3D_DMA_LLI_WORDS];
+	lli_phys = g3d->dma_lli_phys + g3d->lli_used * G3D_DMA_LLI_SIZE;
+
+	lli[G3D_DMA_LLI_SRC_WORD] = lli_phys
+			+ ((void *)&lli[G3D_DMA_LLI_CONST_WORD] - (void *)lli);
+	lli[G3D_DMA_LLI_DST_WORD] = g3d->base_phys + reg;
+	lli[G3D_DMA_LLI_NEXT_WORD] = 0;
+	lli[G3D_DMA_LLI_CTRL0_WORD] = 0x7A480000;
+	lli[G3D_DMA_LLI_CTRL1_WORD] = num_words;
+	lli[G3D_DMA_LLI_CONST_WORD] = val;
+
+	if (g3d->lli_used) {
+		uint32_t *lli_prev = lli - G3D_DMA_LLI_WORDS;
+
+		lli_prev[G3D_DMA_LLI_NEXT_WORD] = lli_phys;
+	}
+
+	++g3d->lli_used;
+}
+
+static void g3d_dma_copy(struct g3d_drvdata *g3d, uint32_t reg,
+			 dma_addr_t src, uint32_t num_words)
+{
+	dma_addr_t lli_phys;
+	uint32_t *lli;
+
+	if (!g3d_dma_free_lli(g3d)) {
+		g3d_dma_flush(g3d);
+		g3d_dma_wait(g3d, 0, false);
+	}
+
+	lli = &g3d->dma_lli[g3d->lli_used * G3D_DMA_LLI_WORDS];
+	lli_phys = g3d->dma_lli_phys + g3d->lli_used * G3D_DMA_LLI_SIZE;
+
+	lli[G3D_DMA_LLI_SRC_WORD] = src;
+	lli[G3D_DMA_LLI_DST_WORD] = g3d->base_phys + reg;
+	lli[G3D_DMA_LLI_NEXT_WORD] = 0;
+	lli[G3D_DMA_LLI_CTRL0_WORD] = 0x76489000;
+	lli[G3D_DMA_LLI_CTRL1_WORD] = num_words;
+
+	if (g3d->lli_used) {
+		uint32_t *lli_prev = lli - G3D_DMA_LLI_WORDS;
+
+		lli_prev[G3D_DMA_LLI_NEXT_WORD] = lli_phys;
+	}
+
+	++g3d->lli_used;
+}
+
 /*
  * Hardware operations
  */
@@ -847,14 +1029,6 @@ static int g3d_invalidate_caches(struct g3d_drvdata *g3d)
 	return -EFAULT;
 }
 
-static inline bool g3d_pipeline_idle(struct g3d_drvdata *g3d, uint32_t mask)
-{
-	uint32_t stat = g3d_read(g3d, G3D_FGGB_PIPESTAT_REG);
-
-	dev_dbg_pipe(g3d->dev, "%s: stat = %08x\n", __func__, stat);
-	return !(stat & mask);
-}
-
 static inline bool g3d_idle_condition(struct g3d_drvdata *g3d, uint32_t mask)
 {
 	return g3d_pipeline_idle(g3d, mask) || !list_empty(&g3d->submit_list);
@@ -894,6 +1068,12 @@ static int g3d_flush_pipeline(struct g3d_drvdata *g3d,
 	mask = ((1 << (level + 1)) - 1) & G3D_FGGB_PIPESTAT_MSK;
 
 	dev_dbg_trace(g3d->dev, "%s (mask = %08x)\n", __func__, mask);
+
+	if (g3d->dma_enabled) {
+		ret = g3d_dma_wait(g3d, mask, idle);
+		if (ret)
+			return ret;
+	}
 
 	if (g3d_pipeline_idle(g3d, mask)) {
 		trace_g3d_draw_complete(g3d->num_draws);
@@ -1387,6 +1567,9 @@ static int g3d_handle_draw_buffer(struct g3d_submit *submit,
 	if (ret)
 		return ret;
 
+	if (in_interrupt() && g3d->dma_enabled && g3d_dma_free_lli(g3d) < 4)
+		return -EINVAL;
+
 	req = req_data(req);
 
 	num_vertices = req[G3D_DRAW_VERTICES];
@@ -1396,6 +1579,17 @@ static int g3d_handle_draw_buffer(struct g3d_submit *submit,
 	trace_g3d_draw_request(++g3d->num_draws);
 
 	if (!(req[G3D_DRAW_CONTROL] & G3D_DRAW_INDEXED)) {
+		if (g3d->dma_enabled) {
+			g3d_dma_set(g3d, G3D_FGHI_CONTROL_REG, 0x80010009, 1);
+			g3d_dma_set(g3d, G3D_FGHI_IDXOFFSET_REG, 0x00000001, 1);
+			g3d_dma_set(g3d, G3D_FGHI_FIFO_ENTRY_REG,
+					num_vertices, 1);
+			g3d_dma_set(g3d, G3D_FGHI_FIFO_ENTRY_REG, 0, 1);
+			g3d_dma_flush(g3d);
+
+			return 0;
+		}
+
 		g3d_write_relaxed(g3d, 0x80010009, G3D_FGHI_CONTROL_REG);
 		g3d_write(g3d, 0x00000001, G3D_FGHI_IDXOFFSET_REG);
 		g3d_write(g3d, num_vertices, G3D_FGHI_FIFO_ENTRY_REG);
@@ -1409,6 +1603,22 @@ static int g3d_handle_draw_buffer(struct g3d_submit *submit,
 
 	obj = g3d_lookup_gem_noref(submit, handle, false);
 	data = obj->buffer->kvaddr + offset;
+
+	if (g3d->dma_enabled) {
+		dma_addr_t data_phys = obj->buffer->dma_addr + offset;
+
+		g3d_dma_set(g3d, G3D_FGHI_CONTROL_REG, 0x83000019, 1);
+		g3d_dma_set(g3d, G3D_FGHI_IDXOFFSET_REG, 0x00000000, 1);
+		g3d_dma_set(g3d, G3D_FGHI_FIFO_ENTRY_REG, num_vertices, 1);
+
+		num_vertices = ALIGN(num_vertices, 4);
+
+		g3d_dma_copy(g3d, G3D_FGHI_FIFO_ENTRY_REG, data_phys,
+				num_vertices / 4);
+		g3d_dma_flush(g3d);
+
+		return 0;
+	}
 
 	g3d_write_relaxed(g3d, 0x83000019, G3D_FGHI_CONTROL_REG);
 	g3d_write(g3d, 0x00000000, G3D_FGHI_IDXOFFSET_REG);
@@ -1485,16 +1695,20 @@ static int g3d_handle_vertex_buffer(struct g3d_submit *submit,
 	int ret;
 
 	g3d_state_mark_dirty(ctx, G3D_FLUSH_VERTEX_FIFO);
+
 	ret = g3d_prepare_draw(ctx, submit, req);
 	if (ret)
 		return ret;
+
+	if (in_interrupt() && g3d->dma_enabled && g3d_dma_free_lli(g3d) < 4)
+		return -EINVAL;
 
 	req = req_data(req);
 
 	handle = req[G3D_VERTEX_BUF_HANDLE];
 	offset = req[G3D_VERTEX_BUF_OFFSET];
 	dst_offset = req[G3D_VERTEX_BUF_DST_OFFSET];
-	length = req[G3D_VERTEX_BUF_LENGTH];
+	length = ALIGN(req[G3D_VERTEX_BUF_LENGTH], 4);
 
 	obj = g3d_lookup_gem_noref(submit, handle, false);
 	data = obj->buffer->kvaddr + offset;
@@ -1504,6 +1718,23 @@ static int g3d_handle_vertex_buffer(struct g3d_submit *submit,
 
 	leading = (dst_offset % 16) / 4;
 	trailing = (4 - ((length + dst_offset) % 16) / 4) % 4;
+
+	if (g3d->dma_enabled) {
+		dma_addr_t data_phys = obj->buffer->dma_addr + offset;
+
+		g3d_dma_set(g3d, G3D_FGHI_VBADDR_REG,
+					dst_offset & ~0xf, 1);
+
+		if (leading)
+			g3d_dma_set(g3d, G3D_FGHI_VB_ENTRY_REG, 0, leading);
+
+		g3d_dma_copy(g3d, G3D_FGHI_VB_ENTRY_REG, data_phys, length / 4);
+
+		if (trailing)
+			g3d_dma_set(g3d, G3D_FGHI_VB_ENTRY_REG, 0, trailing);
+
+		return 0;
+	}
 
 	g3d_write(g3d, dst_offset & ~0xf, G3D_FGHI_VBADDR_REG);
 
@@ -2652,6 +2883,12 @@ static void g3d_watchdog_timer(unsigned long data)
 {
 	struct g3d_drvdata *g3d = (struct g3d_drvdata *)data;
 
+	if (!g3d_dma_idle(g3d)) {
+		dev_err(g3d->dev, "DMA transfer timed out\n");
+
+		writel(0, g3d->dma_base + G3D_DMA_CCFG_REG);
+	}
+
 	g3d_idle_irq_ack_and_disable(g3d);
 
 	dev_err(g3d->dev, "pipeline flush timed out (stat = %08x)\n",
@@ -2662,10 +2899,35 @@ static void g3d_watchdog_timer(unsigned long data)
 	wake_up_interruptible(&g3d->idle_wq);
 }
 
+static int g3d_schedule_from_irq(struct g3d_drvdata *g3d)
+{
+	struct g3d_submit *submit = g3d->submit;
+	struct g3d_context *ctx;
+	int ret;
+
+	if (!submit)
+		return 0;
+
+	ctx = submit->ctx;
+
+	while (submit->cur < submit->end) {
+		if (test_bit(G3D_CONTEXT_ABORTED, &ctx->state))
+			break;
+
+		ret = g3d_request_handle(submit, submit->cur);
+		if (ret)
+			return ret;
+
+		submit->cur = req_data(submit->cur)
+					+ req_length(submit->cur);
+	}
+
+	return 0;
+}
+
 static irqreturn_t g3d_handle_irq(int irq, void *dev_id)
 {
 	struct g3d_drvdata *g3d = (struct g3d_drvdata *)dev_id;
-	struct g3d_submit *submit = g3d->submit;
 	int ret;
 
 	g3d_idle_irq_ack_and_disable(g3d);
@@ -2674,23 +2936,9 @@ static irqreturn_t g3d_handle_irq(int irq, void *dev_id)
 
 	dev_dbg_events(g3d->dev, "%s:%d\n", __func__, __LINE__);
 
-	if (submit) {
-		struct g3d_context *ctx = submit->ctx;
-
-		while (submit->cur < submit->end) {
-			if (test_bit(G3D_CONTEXT_ABORTED, &ctx->state))
-				break;
-
-			ret = g3d_request_handle(submit, submit->cur);
-			if (ret == -EINVAL)
-				break;
-			if (ret == -EAGAIN)
-				return IRQ_HANDLED;
-
-			submit->cur = req_data(submit->cur)
-						+ req_length(submit->cur);
-		}
-	}
+	ret = g3d_schedule_from_irq(g3d);
+	if (ret == -EAGAIN)
+		return IRQ_HANDLED;
 
 	dev_dbg_events(g3d->dev, "%s:%d waking up flush/idle_wq\n",
 			__func__, __LINE__);
@@ -3190,6 +3438,7 @@ static int g3d_probe(struct platform_device *pdev)
 	g3d->base = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(g3d->base))
 		return PTR_ERR(g3d->base);
+	g3d->base_phys = res->start;
 
 	/* get the IRQ */
 	g3d->irq = platform_get_irq(pdev, 0);
@@ -3205,6 +3454,32 @@ static int g3d_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev, "request_irq failed (%d).\n", ret);
 		return ret;
+	}
+
+	/* try to map DMA registers */
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	g3d->dma_base = devm_ioremap_resource(&pdev->dev, res);
+
+	/* try to get DMA clock */
+	g3d->dma_clock = devm_clk_get(&pdev->dev, "dma-clk");
+
+	if (!IS_ERR(g3d->dma_base) && !IS_ERR(g3d->dma_clock)) {
+		clk_prepare_enable(g3d->dma_clock);
+
+		dev_info(&pdev->dev,
+				"found DMA resources, using external DMA\n");
+		g3d->dma_enabled = true;
+	}
+
+	if (g3d->dma_enabled) {
+		g3d->dma_lli = dma_alloc_coherent(&pdev->dev,
+				G3D_NUM_DMA_LLI_ENTRIES * G3D_DMA_LLI_SIZE,
+				&g3d->dma_lli_phys, GFP_KERNEL);
+		if (!g3d->dma_lli) {
+			dev_err(&pdev->dev,
+				"failed to allocate DMA LLI buffer, disabling DMA\n");
+			g3d->dma_enabled = false;
+		}
 	}
 
 	g3d->dev = &pdev->dev;
@@ -3267,6 +3542,10 @@ err_subdrv_register:
 	kthread_stop(g3d->thread);
 err_thread:
 	pm_runtime_disable(&pdev->dev);
+	if (g3d->dma_enabled)
+		dma_free_coherent(&pdev->dev,
+				G3D_NUM_DMA_LLI_ENTRIES * G3D_DMA_LLI_SIZE,
+				g3d->dma_lli, g3d->dma_lli_phys);
 
 	return ret;
 }
@@ -3286,6 +3565,14 @@ static int g3d_remove(struct platform_device *pdev)
 
 	pm_runtime_suspend(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+
+	if (g3d->dma_enabled) {
+		dma_free_coherent(&pdev->dev,
+				G3D_NUM_DMA_LLI_ENTRIES * G3D_DMA_LLI_SIZE,
+				g3d->dma_lli, g3d->dma_lli_phys);
+
+		clk_disable_unprepare(g3d->dma_clock);
+	}
 
 	return 0;
 }
