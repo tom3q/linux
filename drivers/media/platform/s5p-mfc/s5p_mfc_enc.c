@@ -796,7 +796,7 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 		ctx->state = MFCINST_RUNNING;
 		if (s5p_mfc_ctx_ready(ctx))
 			set_work_bit_irqsave(ctx);
-		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+		s5p_mfc_try_run(dev);
 	} else {
 		enc_pb_count = s5p_mfc_hw_call(dev->mfc_ops,
 				get_enc_dpb_count, dev);
@@ -1694,7 +1694,7 @@ static int vidioc_encoder_cmd(struct file *file, void *priv,
 			if (s5p_mfc_ctx_ready(ctx))
 				set_work_bit_irqsave(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
-			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+			s5p_mfc_try_run(dev);
 		} else {
 			mfc_debug(2, "EOS: marking last buffer of stream\n");
 			buf = list_entry(ctx->src_queue.prev,
@@ -1917,7 +1917,7 @@ static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 	/* If context is ready then dev = work->data;schedule it to run */
 	if (s5p_mfc_ctx_ready(ctx))
 		set_work_bit_irqsave(ctx);
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+	s5p_mfc_try_run(dev);
 
 	return 0;
 }
@@ -1984,7 +1984,7 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 	}
 	if (s5p_mfc_ctx_ready(ctx))
 		set_work_bit_irqsave(ctx);
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+	s5p_mfc_try_run(dev);
 }
 
 static struct vb2_ops s5p_mfc_enc_qops = {

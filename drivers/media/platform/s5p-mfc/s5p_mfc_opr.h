@@ -287,7 +287,7 @@ struct s5p_mfc_hw_ops {
 			unsigned long y_addr, unsigned long c_addr);
 	void (*get_enc_frame_buffer)(struct s5p_mfc_ctx *ctx,
 			unsigned long *y_addr, unsigned long *c_addr);
-	void (*try_run)(struct s5p_mfc_dev *dev);
+	int (*run_ctx)(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx);
 	void (*clear_int_flags)(struct s5p_mfc_dev *dev);
 	int (*get_dspl_y_adr)(struct s5p_mfc_dev *dev);
 	int (*get_dec_y_adr)(struct s5p_mfc_dev *dev);
@@ -323,6 +323,7 @@ int s5p_mfc_alloc_generic_buf(struct s5p_mfc_dev *dev, unsigned int mem_ctx,
 			   struct s5p_mfc_priv_buf *b);
 void s5p_mfc_release_generic_buf(struct s5p_mfc_dev *dev,
 			      struct s5p_mfc_priv_buf *b);
+void s5p_mfc_try_run(struct s5p_mfc_dev *dev);
 
 
 #endif /* S5P_MFC_OPR_H_ */

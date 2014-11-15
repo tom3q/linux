@@ -1316,41 +1316,10 @@ static int s5p_mfc_run_init_dec_buffers(struct s5p_mfc_ctx *ctx)
 }
 
 /* Try running an operation on hardware */
-static void s5p_mfc_try_run_v5(struct s5p_mfc_dev *dev)
+static int s5p_mfc_run_ctx_v5(struct s5p_mfc_dev *dev,
+			      struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_ctx *ctx;
-	int new_ctx;
-	unsigned int ret = 0;
-
-	if (test_bit(0, &dev->enter_suspend)) {
-		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
-		return;
-	}
-	/* Check whether hardware is not running */
-	if (test_and_set_bit(0, &dev->hw_lock) != 0) {
-		/* This is perfectly ok, the scheduled ctx should wait */
-		mfc_debug(1, "Couldn't lock HW\n");
-		return;
-	}
-	/* Choose the context to run */
-	new_ctx = s5p_mfc_get_new_ctx(dev);
-	if (new_ctx < 0) {
-		/* No contexts to run */
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0) {
-			mfc_err("Failed to unlock hardware\n");
-			return;
-		}
-		mfc_debug(1, "No ctx is scheduled to be run\n");
-		return;
-	}
-	ctx = dev->ctx[new_ctx];
-	/* Got context to run in ctx */
-	/*
-	 * Last frame has already been sent to MFC.
-	 * Now obtaining frames from MFC buffer
-	 */
-	s5p_mfc_clock_on();
-	s5p_mfc_clean_ctx_int_flags(ctx);
+	int ret = 0;
 
 	if (ctx->type == MFCINST_DECODER) {
 		s5p_mfc_set_dec_desc_buffer(ctx);
@@ -1416,17 +1385,7 @@ static void s5p_mfc_try_run_v5(struct s5p_mfc_dev *dev)
 		ret = -EAGAIN;
 	}
 
-	if (ret) {
-		/* Free hardware lock */
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0)
-			mfc_err("Failed to unlock hardware\n");
-
-		/* This is in deed imporant, as no operation has been
-		 * scheduled, reduce the clock count as no one will
-		 * ever do this, because no interrupt related to this try_run
-		 * will ever come from hardware. */
-		s5p_mfc_clock_off();
-	}
+	return ret;
 }
 
 static void s5p_mfc_clear_int_flags_v5(struct s5p_mfc_dev *dev)
@@ -1608,7 +1567,7 @@ static struct s5p_mfc_hw_ops s5p_mfc_ops_v5 = {
 	.set_enc_stream_buffer = s5p_mfc_set_enc_stream_buffer_v5,
 	.set_enc_frame_buffer = s5p_mfc_set_enc_frame_buffer_v5,
 	.get_enc_frame_buffer = s5p_mfc_get_enc_frame_buffer_v5,
-	.try_run = s5p_mfc_try_run_v5,
+	.run_ctx = s5p_mfc_run_ctx_v5,
 	.clear_int_flags = s5p_mfc_clear_int_flags_v5,
 	.get_dspl_y_adr = s5p_mfc_get_dspl_y_adr_v5,
 	.get_dec_y_adr = s5p_mfc_get_dec_y_adr_v5,

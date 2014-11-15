@@ -385,7 +385,7 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 		wake_up_ctx(ctx, reason, err);
 		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
 		s5p_mfc_clock_off();
-		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+		s5p_mfc_try_run(dev);
 		return;
 	}
 	if (ctx->dpb_flush_flag)
@@ -461,7 +461,7 @@ leave_handle_frame:
 	if (test_bit(0, &dev->enter_suspend))
 		wake_up_dev(dev, reason, err);
 	else
-		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+		s5p_mfc_try_run(dev);
 }
 
 /* Error handling for interrupt */
@@ -560,7 +560,7 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
 	clear_work_bit(ctx);
 	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
 	s5p_mfc_clock_off();
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+	s5p_mfc_try_run(dev);
 	wake_up_ctx(ctx, reason, err);
 }
 
@@ -598,7 +598,7 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 		s5p_mfc_clock_off();
 
 		wake_up(&ctx->queue);
-		s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+		s5p_mfc_try_run(dev);
 	} else {
 		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
 
@@ -632,7 +632,7 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 
 	s5p_mfc_clock_off();
 	wake_up(&ctx->queue);
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+	s5p_mfc_try_run(dev);
 }
 
 /* Interrupt processing */
@@ -675,7 +675,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 			WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
 			s5p_mfc_clock_off();
 			wake_up_ctx(ctx, reason, err);
-			s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+			s5p_mfc_try_run(dev);
 		} else {
 			s5p_mfc_handle_frame(ctx, reason, err);
 		}
@@ -741,7 +741,7 @@ irq_cleanup_hw:
 	clear_work_bit(ctx);
 	wake_up(&ctx->queue);
 
-	s5p_mfc_hw_call(dev->mfc_ops, try_run, dev);
+	s5p_mfc_try_run(dev);
 	spin_unlock(&dev->irqlock);
 	mfc_debug(2, "Exit via irq_cleanup_hw\n");
 	return IRQ_HANDLED;
