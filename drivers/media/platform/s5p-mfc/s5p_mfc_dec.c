@@ -286,6 +286,35 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 
 	s5p_mfc_hw_call(dev->mfc_ops, dec_calc_dpb_size, ctx);
 
+	if (ctx->src_fmt->fourcc == V4L2_PIX_FMT_H264) {
+		u32 crop_h, crop_v;
+		u32 left, right, top, bottom;
+		crop_h = s5p_mfc_hw_call(dev->mfc_ops,
+				get_crop_info_h, ctx);
+		crop_v = s5p_mfc_hw_call(dev->mfc_ops,
+				get_crop_info_v, ctx);
+		right = crop_h >> S5P_FIMV_SHARED_CROP_RIGHT_SHIFT;
+		left = crop_h & S5P_FIMV_SHARED_CROP_LEFT_MASK;
+		bottom = crop_v >> S5P_FIMV_SHARED_CROP_BOTTOM_SHIFT;
+		top = crop_v & S5P_FIMV_SHARED_CROP_TOP_MASK;
+		ctx->crop_left = left;
+		ctx->crop_top = top;
+		ctx->crop_width = ctx->img_width - left - right;
+		ctx->crop_height = ctx->img_height - top - bottom;
+		mfc_debug(2, "Cropping info [h264]: l=%d t=%d "
+			"w=%d h=%d (r=%d b=%d fw=%d fh=%d\n",
+			left, top, ctx->crop_width, ctx->crop_height,
+			right, bottom, ctx->buf_width, ctx->buf_height);
+	} else {
+		ctx->crop_left = 0;
+		ctx->crop_top = 0;
+		ctx->crop_width = ctx->img_width;
+		ctx->crop_height = ctx->img_height;
+		mfc_debug(2, "Cropping info: w=%d h=%d fw=%d fh=%d\n",
+			ctx->crop_width, ctx->crop_height,
+			ctx->buf_width, ctx->buf_height);
+	}
+
 	ctx->pb_count = s5p_mfc_hw_call(dev->mfc_ops, get_dpb_count,
 			dev);
 	ctx->mv_count = s5p_mfc_hw_call(dev->mfc_ops, get_mv_count,
@@ -1065,39 +1094,17 @@ static int vidioc_g_crop(struct file *file, void *priv,
 		struct v4l2_crop *cr)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
-	struct s5p_mfc_dev *dev = ctx->dev;
-	u32 left, right, top, bottom;
 
-	if (ctx->state != MFCINST_HEAD_PARSED &&
-	    ctx->state != MFCINST_RUNNING &&
-	    ctx->state != MFCINST_FINISHING &&
-	    ctx->state != MFCINST_FINISHED) {
+	if (ctx->state < MFCINST_HEAD_PARSED ||
+	    ctx->state > MFCINST_FINISHED) {
 		mfc_err("Can not get crop information\n");
 		return -EINVAL;
 	}
-	if (ctx->src_fmt->fourcc == V4L2_PIX_FMT_H264) {
-		left = s5p_mfc_hw_call(dev->mfc_ops, get_crop_info_h, ctx);
-		right = left >> S5P_FIMV_SHARED_CROP_RIGHT_SHIFT;
-		left = left & S5P_FIMV_SHARED_CROP_LEFT_MASK;
-		top = s5p_mfc_hw_call(dev->mfc_ops, get_crop_info_v, ctx);
-		bottom = top >> S5P_FIMV_SHARED_CROP_BOTTOM_SHIFT;
-		top = top & S5P_FIMV_SHARED_CROP_TOP_MASK;
-		cr->c.left = left;
-		cr->c.top = top;
-		cr->c.width = ctx->img_width - left - right;
-		cr->c.height = ctx->img_height - top - bottom;
-		mfc_debug(2, "Cropping info [h264]: l=%d t=%d w=%d h=%d (r=%d b=%d fw=%d fh=%d\n",
-			  left, top, cr->c.width, cr->c.height, right, bottom,
-			  ctx->buf_width, ctx->buf_height);
-	} else {
-		cr->c.left = 0;
-		cr->c.top = 0;
-		cr->c.width = ctx->img_width;
-		cr->c.height = ctx->img_height;
-		mfc_debug(2, "Cropping info: w=%d h=%d fw=%d fh=%d\n",
-			  cr->c.width,	cr->c.height, ctx->buf_width,
-			  ctx->buf_height);
-	}
+
+	cr->c.left = ctx->crop_left;
+	cr->c.top = ctx->crop_top;
+	cr->c.width = ctx->crop_width;
+	cr->c.height = ctx->crop_height;
 	return 0;
 }
 
