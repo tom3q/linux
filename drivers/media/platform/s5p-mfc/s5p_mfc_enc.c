@@ -732,24 +732,48 @@ static const char * const *mfc51_get_menu(u32 id)
 	return NULL;
 }
 
-static int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
+static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
-	mfc_debug(2, "src=%d, dst=%d, state=%d\n",
-		  ctx->src_queue_cnt, ctx->dst_queue_cnt, ctx->state);
-	/* context is ready to make header */
-	if (ctx->state == MFCINST_GOT_INST && ctx->dst_queue_cnt >= 1)
-		return 1;
-	/* context is ready to encode a frame */
-	if ((ctx->state == MFCINST_RUNNING ||
-		ctx->state == MFCINST_HEAD_PRODUCED) &&
-		ctx->src_queue_cnt >= 1 && ctx->dst_queue_cnt >= 1)
-		return 1;
-	/* context is ready to encode remaining frames */
-	if (ctx->state == MFCINST_FINISHING &&
-		ctx->dst_queue_cnt >= 1)
-		return 1;
-	mfc_debug(2, "ctx is not ready\n");
-	return 0;
+	bool ready;
+
+	switch (ctx->state) {
+	/* Context is not initialized. */
+	case MFCINST_FREE:
+	/* Context is stopped. */
+	case MFCINST_FINISHED:
+	case MFCINST_ERROR:
+	case MFCINST_ABORT:
+		ready = false;
+		break;
+	/* Context is to get a hardware instance. */
+	case MFCINST_INIT:
+	/* Context is to return hardware instance. */
+	case MFCINST_RETURN_INST:
+		ready = true;
+		break;
+	/* Context is to output header. */
+	case MFCINST_GOT_INST:
+		ready = ctx->dst_queue_cnt >= 1;
+		break;
+	/* Context is to encode a frame */
+	case MFCINST_HEAD_PRODUCED:
+	case MFCINST_RUNNING:
+		ready = ctx->src_queue_cnt >= 1 &&
+			ctx->dst_queue_cnt >= 1;
+		break;
+	/* Context is to flush remaining encoded frames */
+	case MFCINST_FINISHING:
+		ready = ctx->dst_queue_cnt >= 1;
+		break;
+	default:
+		mfc_err("Context %d in invalid state %d\n", ctx->num,
+			ctx->state);
+		return false;
+	}
+
+	mfc_debug(2, "ctx %d in state %d is %sready\n", ctx->num, ctx->state,
+		  ready ? "" : "ready ");
+	return ready;
 }
 
 static void cleanup_ref_queue(struct s5p_mfc_ctx *ctx)

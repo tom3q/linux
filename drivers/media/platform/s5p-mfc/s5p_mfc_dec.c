@@ -221,35 +221,57 @@ static struct mfc_control controls[] = {
 #define NUM_CTRLS ARRAY_SIZE(controls)
 
 /* Check whether a context should be run on hardware */
-static int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
+static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 {
+	bool ready;
+
+	switch (ctx->state) {
+	/* Context is not initialized. */
+	case MFCINST_FREE:
+	/* Context is stopped. */
+	case MFCINST_FINISHED:
+	case MFCINST_ERROR:
+	case MFCINST_ABORT:
+		ready = false;
+		break;
+	/* Context is to get a hardware instance. */
+	case MFCINST_INIT:
+	/* Context is to discard DPB. (MFCv6+) */
+	case MFCINST_FLUSH:
+	/* Context is to return its hardware instance. */
+	case MFCINST_RETURN_INST:
+		ready = true;
+		break;
 	/* Context is to parse header */
-	if (ctx->src_queue_cnt >= 1 && ctx->state == MFCINST_GOT_INST)
-		return 1;
+	case MFCINST_GOT_INST:
+	case MFCINST_RES_CHANGE_END:
+		ready = ctx->src_queue_cnt >= 1;
+		break;
+	/* Context is to set CAPTURE buffers */
+	case MFCINST_HEAD_PARSED:
+		ready = ctx->src_queue_cnt >= 1 &&
+			ctx->capture_state == QUEUE_BUFS_MMAPED;
+		break;
 	/* Context is to decode a frame */
-	if (ctx->src_queue_cnt >= 1 &&
-	    ctx->state == MFCINST_RUNNING &&
-	    ctx->dst_queue_cnt >= ctx->pb_count)
-		return 1;
-	/* Context is to return last frame */
-	if (ctx->state == MFCINST_FINISHING &&
-	    ctx->dst_queue_cnt >= ctx->pb_count)
-		return 1;
-	/* Context is to set buffers */
-	if (ctx->src_queue_cnt >= 1 &&
-	    ctx->state == MFCINST_HEAD_PARSED &&
-	    ctx->capture_state == QUEUE_BUFS_MMAPED)
-		return 1;
-	/* Resolution change */
-	if ((ctx->state == MFCINST_RES_CHANGE_INIT ||
-		ctx->state == MFCINST_RES_CHANGE_FLUSH) &&
-		ctx->dst_queue_cnt >= ctx->pb_count)
-		return 1;
-	if (ctx->state == MFCINST_RES_CHANGE_END &&
-		ctx->src_queue_cnt >= 1)
-		return 1;
-	mfc_debug(2, "ctx is not ready\n");
-	return 0;
+	case MFCINST_RUNNING:
+		ready = ctx->src_queue_cnt >= 1 &&
+			ctx->dst_queue_cnt >= ctx->pb_count;
+		break;
+	/* Context is to flush remaining decoded frames */
+	case MFCINST_RES_CHANGE_INIT:
+	case MFCINST_RES_CHANGE_FLUSH:
+	case MFCINST_FINISHING:
+		ready = ctx->dst_queue_cnt >= ctx->pb_count;
+		break;
+	default:
+		mfc_err("Context %d in invalid state %d\n", ctx->num,
+			ctx->state);
+		return false;
+	}
+
+	mfc_debug(2, "ctx %d in state %d is %sready\n", ctx->num, ctx->state,
+		  ready ? "" : "ready ");
+	return ready;
 }
 
 static const struct s5p_mfc_codec_ops decoder_codec_ops = {
