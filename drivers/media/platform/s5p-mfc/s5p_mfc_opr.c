@@ -162,7 +162,6 @@ int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx,
 		last_frame = MFC_DEC_LAST_FRAME;
 		s5p_mfc_hw_call(dev->mfc_ops, set_dec_stream_buffer, ctx,
 				0, 0, 0);
-		dev->curr_ctx = ctx->num;
 		s5p_mfc_hw_call(dev->mfc_ops, decode_one_frame, ctx,
 				last_frame);
 		return 0;
@@ -181,7 +180,6 @@ int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx,
 			ctx->consumed_stream,
 			temp_vb->b->vb2_buf.planes[0].bytesused);
 
-	dev->curr_ctx = ctx->num;
 	if (temp_vb->b->vb2_buf.planes[0].bytesused == 0) {
 		last_frame = MFC_DEC_LAST_FRAME;
 		mfc_debug(2, "Setting ctx->state to FINISHING\n");
@@ -244,7 +242,6 @@ static int s5p_mfc_run_enc_frame(struct s5p_mfc_ctx *ctx)
 
 	s5p_mfc_hw_call(dev->mfc_ops, set_enc_stream_buffer, ctx, dst_addr,
 			dst_size);
-	dev->curr_ctx = ctx->num;
 	s5p_mfc_hw_call(dev->mfc_ops, encode_one_frame, ctx);
 
 	return 0;
@@ -263,7 +260,6 @@ static void s5p_mfc_run_init_dec(struct s5p_mfc_ctx *ctx)
 	s5p_mfc_hw_call(dev->mfc_ops, set_dec_stream_buffer, ctx,
 			vb2_dma_contig_plane_dma_addr(&temp_vb->b->vb2_buf, 0),
 			0, temp_vb->b->vb2_buf.planes[0].bytesused);
-	dev->curr_ctx = ctx->num;
 	s5p_mfc_hw_call(dev->mfc_ops, init_decode, ctx);
 }
 
@@ -280,7 +276,6 @@ static void s5p_mfc_run_init_enc(struct s5p_mfc_ctx *ctx)
 	dst_size = vb2_plane_size(&dst_mb->b->vb2_buf, 0);
 	s5p_mfc_hw_call(dev->mfc_ops, set_enc_stream_buffer, ctx,
 			dst_addr, dst_size);
-	dev->curr_ctx = ctx->num;
 	s5p_mfc_hw_call(dev->mfc_ops, init_encode, ctx);
 }
 
@@ -310,8 +305,6 @@ static int s5p_mfc_run_init_dec_buffers(struct s5p_mfc_ctx *ctx)
 	s5p_mfc_hw_call(dev->mfc_ops, set_dec_stream_buffer, ctx,
 			vb2_dma_contig_plane_dma_addr(&temp_vb->b->vb2_buf, 0),
 			0, temp_vb->b->vb2_buf.planes[0].bytesused);
-
-	dev->curr_ctx = ctx->num;
 
 	ret = s5p_mfc_hw_call(dev->mfc_ops, set_dec_frame_buffer, ctx);
 	if (ret) {
@@ -447,6 +440,7 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 		mfc_debug(1, "No ctx is scheduled to be run.\n");
 		return;
 	}
+	dev->curr_ctx = new_ctx;
 
 	mfc_debug(1, "New context: %d\n", new_ctx);
 	ctx = dev->ctx[new_ctx];

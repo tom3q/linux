@@ -89,7 +89,6 @@ static int s5p_mfc_open_inst_cmd_v6(struct s5p_mfc_ctx *ctx)
 	int codec_type;
 
 	mfc_debug(2, "Requested codec mode: %d\n", ctx->codec_mode);
-	dev->curr_ctx = ctx->num;
 	switch (ctx->codec_mode) {
 	case S5P_MFC_CODEC_H264_DEC:
 		codec_type = S5P_FIMV_CODEC_H264_DEC_V6;
@@ -147,7 +146,6 @@ static int s5p_mfc_close_inst_cmd_v6(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_dev *dev = ctx->dev;
 	int ret = 0;
 
-	dev->curr_ctx = ctx->num;
 	if (ctx->state != MFCINST_FREE) {
 		mfc_write(dev, ctx->inst_no, S5P_FIMV_INSTANCE_ID_V6);
 		ret = s5p_mfc_cmd_host2risc_v6(dev,
@@ -1504,7 +1502,6 @@ static void s5p_mfc_set_flush_v6(struct s5p_mfc_ctx *ctx, int flush)
 	const struct s5p_mfc_regs *mfc_regs = dev->mfc_regs;
 
 	if (flush) {
-		dev->curr_ctx = ctx->num;
 		writel(ctx->inst_no, mfc_regs->instance_id);
 		s5p_mfc_cmd_host2risc_v6(dev, S5P_FIMV_H2R_CMD_FLUSH_V6);
 	}
@@ -1613,19 +1610,14 @@ static void s5p_mfc_encode_one_frame_v6(struct s5p_mfc_ctx *ctx)
 
 static void s5p_mfc_run_dec_last_frames_v6(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_dev *dev = ctx->dev;
-
 	s5p_mfc_set_dec_stream_buffer_v6(ctx, 0, 0, 0);
-	dev->curr_ctx = ctx->num;
 	s5p_mfc_decode_one_frame_v6(ctx, MFC_DEC_LAST_FRAME);
 }
 
 static int s5p_mfc_run_init_enc_buffers_v6(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_dev *dev = ctx->dev;
 	int ret;
 
-	dev->curr_ctx = ctx->num;
 	ret = s5p_mfc_set_enc_ref_buffer_v6(ctx);
 	if (ret) {
 		mfc_err("Failed to alloc frame mem.\n");
