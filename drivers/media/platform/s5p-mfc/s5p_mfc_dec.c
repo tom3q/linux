@@ -253,9 +253,7 @@ static int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 }
 
 static const struct s5p_mfc_codec_ops decoder_codec_ops = {
-	.pre_seq_start		= NULL,
 	.post_seq_start		= NULL,
-	.pre_frame_start	= NULL,
 	.post_frame_start	= NULL,
 };
 
