@@ -818,8 +818,6 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 
 	if (!IS_MFCV6_PLUS(dev)) {
 		ctx->state = MFCINST_RUNNING;
-		if (s5p_mfc_ctx_ready(ctx))
-			set_work_bit_irqsave(ctx);
 	} else {
 		enc_pb_count = s5p_mfc_hw_call(dev->mfc_ops,
 				get_enc_dpb_count, dev);
@@ -909,13 +907,12 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 		vb2_set_plane_payload(&mb_entry->b->vb2_buf, 0, strm_size);
 		vb2_buffer_done(&mb_entry->b->vb2_buf, VB2_BUF_STATE_DONE);
 	}
-	if ((ctx->src_queue_cnt == 0) || (ctx->dst_queue_cnt == 0))
-		clear_work_bit(ctx);
 
 	return 0;
 }
 
 static const struct s5p_mfc_codec_ops encoder_codec_ops = {
+	.ctx_ready		= s5p_mfc_ctx_ready,
 	.post_seq_start		= enc_post_seq_start,
 	.post_frame_start	= enc_post_frame_start,
 };
@@ -1714,10 +1711,8 @@ static int vidioc_encoder_cmd(struct file *file, void *priv,
 		if (list_empty(&ctx->src_queue)) {
 			mfc_debug(2, "EOS: empty src queue, entering finishing state\n");
 			ctx->state = MFCINST_FINISHING;
-			if (s5p_mfc_ctx_ready(ctx))
-				set_work_bit_irqsave(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
-			s5p_mfc_try_run(dev);
+			s5p_mfc_try_ctx(ctx);
 		} else {
 			mfc_debug(2, "EOS: marking last buffer of stream\n");
 			buf = list_entry(ctx->src_queue.prev,
@@ -1938,10 +1933,7 @@ static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 		}
 	}
 
-	/* If context is ready then dev = work->data;schedule it to run */
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_try_run(dev);
+	s5p_mfc_try_ctx(ctx);
 
 	return 0;
 }
@@ -2007,9 +1999,7 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 	} else {
 		mfc_err("unsupported buffer type (%d)\n", vq->type);
 	}
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_try_run(dev);
+	s5p_mfc_try_ctx(ctx);
 }
 
 static struct vb2_ops s5p_mfc_enc_qops = {

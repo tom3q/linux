@@ -275,6 +275,7 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 }
 
 static const struct s5p_mfc_codec_ops decoder_codec_ops = {
+	.ctx_ready		= s5p_mfc_ctx_ready,
 	.post_seq_start		= NULL,
 	.post_frame_start	= NULL,
 };
@@ -569,9 +570,7 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 		WARN_ON(ctx->dst_bufs_cnt != ctx->total_dpb_count);
 		ctx->capture_state = QUEUE_BUFS_MMAPED;
 
-		if (s5p_mfc_ctx_ready(ctx))
-			set_work_bit_irqsave(ctx);
-		s5p_mfc_try_run(dev);
+		s5p_mfc_try_ctx(ctx);
 		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_INIT_BUFFERS_RET,
 					  0);
 	} else {
@@ -848,10 +847,8 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 		if (list_empty(&ctx->src_queue)) {
 			mfc_err("EOS: empty src queue, entering finishing state");
 			ctx->state = MFCINST_FINISHING;
-			if (s5p_mfc_ctx_ready(ctx))
-				set_work_bit_irqsave(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
-			s5p_mfc_try_run(dev);
+			s5p_mfc_try_ctx(ctx);
 		} else {
 			mfc_err("EOS: marking last buffer of stream");
 			buf = list_entry(ctx->src_queue.prev,
@@ -1021,16 +1018,12 @@ static int s5p_mfc_buf_init(struct vb2_buffer *vb)
 static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(q->drv_priv);
-	struct s5p_mfc_dev *dev = ctx->dev;
 
 	v4l2_ctrl_handler_setup(&ctx->ctrl_handler);
 	if (ctx->state == MFCINST_FINISHING ||
 		ctx->state == MFCINST_FINISHED)
 		ctx->state = MFCINST_RUNNING;
-	/* If context is ready then dev = work->data;schedule it to run */
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_try_run(dev);
+	s5p_mfc_try_ctx(ctx);
 	return 0;
 }
 
@@ -1060,8 +1053,7 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->dec_dst_flag = 0;
 		if (IS_MFCV6_PLUS(dev) && (ctx->state == MFCINST_RUNNING)) {
 			ctx->state = MFCINST_FLUSH;
-			set_work_bit_irqsave(ctx);
-			s5p_mfc_try_run(dev);
+			s5p_mfc_try_ctx(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
 			if (s5p_mfc_wait_for_done_ctx(ctx,
 				S5P_MFC_R2H_CMD_DPB_FLUSH_RET, 0))
@@ -1106,9 +1098,7 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 	} else {
 		mfc_err("Unsupported buffer type (%d)\n", vq->type);
 	}
-	if (s5p_mfc_ctx_ready(ctx))
-		set_work_bit_irqsave(ctx);
-	s5p_mfc_try_run(dev);
+	s5p_mfc_try_ctx(ctx);
 }
 
 static struct vb2_ops s5p_mfc_dec_qops = {

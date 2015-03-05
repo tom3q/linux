@@ -481,3 +481,27 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 		s5p_mfc_clock_off();
 	}
 }
+
+void s5p_mfc_update_ctx_locked(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+
+	assert_spin_locked(&dev->irqlock);
+
+	if (s5p_mfc_hw_call(ctx->c_ops, ctx_ready, ctx))
+		set_bit(ctx->num, &dev->ctx_work_bits);
+	else
+		clear_bit(ctx->num, &dev->ctx_work_bits);
+}
+
+void s5p_mfc_try_ctx(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_dev *dev = ctx->dev;
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->irqlock, flags);
+	s5p_mfc_update_ctx_locked(ctx);
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
+	s5p_mfc_try_run(dev);
+}

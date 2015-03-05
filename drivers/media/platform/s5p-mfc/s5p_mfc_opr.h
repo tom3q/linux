@@ -372,6 +372,7 @@ int s5p_mfc_alloc_generic_buf(struct s5p_mfc_dev *dev, unsigned int mem_ctx,
 void s5p_mfc_release_generic_buf(struct s5p_mfc_dev *dev,
 			      struct s5p_mfc_priv_buf *b);
 void s5p_mfc_try_run(struct s5p_mfc_dev *dev);
-
+void s5p_mfc_update_ctx_locked(struct s5p_mfc_ctx *ctx);
+void s5p_mfc_try_ctx(struct s5p_mfc_ctx *ctx);
 
 #endif /* S5P_MFC_OPR_H_ */

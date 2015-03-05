@@ -465,6 +465,8 @@ struct s5p_mfc_enc_params {
  * struct s5p_mfc_codec_ops - codec ops, used by encoding
  */
 struct s5p_mfc_codec_ops {
+	/* Decides whether the context is ready to run. */
+	bool (*ctx_ready) (struct s5p_mfc_ctx *ctx);
 	/* initialization routines */
 	int (*post_seq_start) (struct s5p_mfc_ctx *ctx);
 	/* execution routines */
@@ -686,11 +688,6 @@ struct mfc_control {
 #define ctrl_to_ctx(__ctrl) \
 	container_of((__ctrl)->handler, struct s5p_mfc_ctx, ctrl_handler)
 
-void clear_work_bit(struct s5p_mfc_ctx *ctx);
-void set_work_bit(struct s5p_mfc_ctx *ctx);
-void clear_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
-void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx);
-int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev);
 void s5p_mfc_cleanup_queue(struct list_head *lh, struct vb2_queue *vq);
 
 #define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \
