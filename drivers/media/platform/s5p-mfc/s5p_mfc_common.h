@@ -468,9 +468,11 @@ struct s5p_mfc_codec_ops {
 	/* Decides whether the context is ready to run. */
 	bool (*ctx_ready) (struct s5p_mfc_ctx *ctx);
 	/* initialization routines */
-	int (*post_seq_start) (struct s5p_mfc_ctx *ctx);
+	void (*post_seq_start) (struct s5p_mfc_ctx *ctx);
 	/* execution routines */
-	int (*post_frame_start) (struct s5p_mfc_ctx *ctx);
+	void (*post_frame_start) (struct s5p_mfc_ctx *ctx, unsigned int err);
+	/* Stream complete handling. */
+	void (*stream_complete) (struct s5p_mfc_ctx *ctx);
 };
 
 /**

@@ -795,7 +795,7 @@ static void cleanup_ref_queue(struct s5p_mfc_ctx *ctx)
 	ctx->ref_queue_cnt = 0;
 }
 
-static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
+static void enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_enc_params *p = &ctx->enc_params;
@@ -825,11 +825,27 @@ static int enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 			ctx->pb_count = enc_pb_count;
 		ctx->state = MFCINST_HEAD_PRODUCED;
 	}
-
-	return 0;
 }
 
-static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
+static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
+{
+	struct s5p_mfc_buf *mb_entry;
+
+	mfc_debug(2, "Stream completed\n");
+
+	ctx->state = MFCINST_FINISHED;
+
+	if (!list_empty(&ctx->dst_queue)) {
+		mb_entry = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf,
+									list);
+		list_del(&mb_entry->list);
+		ctx->dst_queue_cnt--;
+		vb2_set_plane_payload(&mb_entry->b->vb2_buf, 0, 0);
+		vb2_buffer_done(&mb_entry->b->vb2_buf, VB2_BUF_STATE_DONE);
+	}
+}
+
+static void enc_post_frame_start(struct s5p_mfc_ctx *ctx, unsigned int err)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf *mb_entry;
@@ -908,13 +924,15 @@ static int enc_post_frame_start(struct s5p_mfc_ctx *ctx)
 		vb2_buffer_done(&mb_entry->b->vb2_buf, VB2_BUF_STATE_DONE);
 	}
 
-	return 0;
+	if (ctx->state == MFCINST_FINISHING && list_empty(&ctx->ref_queue))
+		s5p_mfc_handle_stream_complete(ctx);
 }
 
 static const struct s5p_mfc_codec_ops encoder_codec_ops = {
 	.ctx_ready		= s5p_mfc_ctx_ready,
 	.post_seq_start		= enc_post_seq_start,
 	.post_frame_start	= enc_post_frame_start,
+	.stream_complete	= s5p_mfc_handle_stream_complete,
 };
 
 /* Query capabilities of the device */
