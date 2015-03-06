@@ -46,41 +46,23 @@ int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev, int command)
 	return 0;
 }
 
-int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx,
-				    int command, int interrupt)
+/* Must be called with dev->mfc_mutex held. */
+int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx)
 {
-	int ret;
+	struct s5p_mfc_dev *dev = ctx->dev;
 
-	if (interrupt) {
-		ret = wait_event_interruptible_timeout(ctx->queue,
-				(ctx->int_cond && (ctx->int_type == command
-			|| ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET)),
-					msecs_to_jiffies(MFC_INT_TIMEOUT));
-	} else {
-		ret = wait_event_timeout(ctx->queue,
-				(ctx->int_cond && (ctx->int_type == command
-			|| ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET)),
-					msecs_to_jiffies(MFC_INT_TIMEOUT));
-	}
-	if (ret == 0) {
-		mfc_err("Interrupt (ctx->int_type:%d, command:%d) timed out\n",
-							ctx->int_type, command);
-		return 1;
-	} else if (ret == -ERESTARTSYS) {
-		mfc_err("Interrupted by a signal\n");
-		return 1;
-	}
-	mfc_debug(1, "Finished waiting (ctx->int_type:%d, command: %d)\n",
-							ctx->int_type, command);
-	if (ctx->int_type == S5P_MFC_R2H_CMD_ERR_RET)
-		return 1;
+	/*
+	 * The mutex prevents new work from being queued for ctx
+	 * and ctx->state from changing after the wait returns.
+	 */
+	WARN_ON(!mutex_is_locked(&dev->mfc_mutex));
+
+	/* Timeouts handled by watchdog. */
+	wait_event(dev->queue, test_bit(ctx->num, &dev->ctx_work_bits));
+
+	if (ctx->state == MFCINST_ERROR)
+		return -EIO;
+
 	return 0;
-}
-
-void s5p_mfc_clean_ctx_int_flags(struct s5p_mfc_ctx *ctx)
-{
-	ctx->int_cond = 0;
-	ctx->int_type = 0;
-	ctx->int_err = 0;
 }
 

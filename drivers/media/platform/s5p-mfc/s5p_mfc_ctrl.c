@@ -449,11 +449,11 @@ int s5p_mfc_open_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 	}
 
 	s5p_mfc_try_ctx(ctx);
-	if (s5p_mfc_wait_for_done_ctx(ctx,
-		S5P_MFC_R2H_CMD_OPEN_INSTANCE_RET, 0)) {
+	ret = s5p_mfc_wait_for_done_ctx(ctx);
+	if (ret) {
 		/* Error or timeout */
-		mfc_err("Error getting instance from hardware\n");
-		ret = -EIO;
+		mfc_err("Error getting instance from hardware for context %d\n",
+			ctx->num);
 		goto err_free_desc_buf;
 	}
 
@@ -474,9 +474,8 @@ void s5p_mfc_close_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
 	ctx->state = MFCINST_RETURN_INST;
 	s5p_mfc_try_ctx(ctx);
 	/* Wait until instance is returned or timeout occurred */
-	if (s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_CLOSE_INSTANCE_RET, 0))
-		mfc_err("Err returning instance\n");
+	if (s5p_mfc_wait_for_done_ctx(ctx))
+		mfc_err("Error returning instance of context %d\n", ctx->num);
 
 	/* Free resources */
 	s5p_mfc_hw_call(dev->mfc_ops, release_codec_buffers, ctx);

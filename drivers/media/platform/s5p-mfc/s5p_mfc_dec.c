@@ -616,8 +616,12 @@ static int vidioc_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 						MFCINST_RES_CHANGE_END)) {
 		/* If the MFC is parsing the header,
 		 * so wait until it is finished */
-		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_SEQ_DONE_RET,
-									0);
+		int ret = s5p_mfc_wait_for_done_ctx(ctx);
+		if (ret) {
+			mfc_err("Waiting for context %d timed out\n",
+				ctx->num);
+			return ret;
+		}
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE &&
 	    ctx->state >= MFCINST_HEAD_PARSED &&
@@ -834,8 +838,10 @@ static int reqbufs_capture(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx,
 		ctx->capture_state = QUEUE_BUFS_MMAPED;
 
 		s5p_mfc_try_ctx(ctx);
-		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_INIT_BUFFERS_RET,
-					  0);
+		ret = s5p_mfc_wait_for_done_ctx(ctx);
+		if (ret)
+			mfc_err("Waiting for context %d timed out\n",
+				ctx->num);
 	} else {
 		mfc_err("Buffers have already been requested\n");
 		ret = -EINVAL;
@@ -1016,6 +1022,7 @@ static int s5p_mfc_dec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct s5p_mfc_ctx *ctx = ctrl_to_ctx(ctrl);
 	struct s5p_mfc_dev *dev = ctx->dev;
+	int ret;
 
 	switch (ctrl->id) {
 	case V4L2_CID_MIN_BUFFERS_FOR_CAPTURE:
@@ -1029,8 +1036,12 @@ static int s5p_mfc_dec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 			return -EINVAL;
 		}
 		/* Should wait for the header to be parsed */
-		s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+		ret = s5p_mfc_wait_for_done_ctx(ctx);
+		if (ret) {
+			mfc_err("Waiting for context %d timed out\n",
+				ctx->num);
+			return ret;
+		}
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
 		    ctx->state < MFCINST_ABORT) {
 			ctrl->val = ctx->pb_count;
@@ -1303,9 +1314,11 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 		dev->curr_ctx == ctx->num && s5p_mfc_hw_is_locked(dev)) {
 		ctx->state = MFCINST_ABORT;
 		spin_unlock_irqrestore(&dev->irqlock, flags);
-		s5p_mfc_wait_for_done_ctx(ctx,
-					S5P_MFC_R2H_CMD_FRAME_DONE_RET, 0);
-		aborted = 1;
+		if (s5p_mfc_wait_for_done_ctx(ctx))
+			mfc_err("Waiting for context %d timed out\n",
+				ctx->num);
+		else
+			aborted = 1;
 		spin_lock_irqsave(&dev->irqlock, flags);
 	}
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
@@ -1318,8 +1331,7 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 			ctx->state = MFCINST_FLUSH;
 			s5p_mfc_try_ctx(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
-			if (s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_DPB_FLUSH_RET, 0))
+			if (s5p_mfc_wait_for_done_ctx(ctx))
 				mfc_err("Err flushing buffers\n");
 			spin_lock_irqsave(&dev->irqlock, flags);
 		}

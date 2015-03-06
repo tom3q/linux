@@ -164,7 +164,6 @@ int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx,
 		s5p_mfc_hw_call(dev->mfc_ops, set_dec_stream_buffer, ctx,
 				0, 0, 0);
 		dev->curr_ctx = ctx->num;
-		s5p_mfc_clean_ctx_int_flags(ctx);
 		s5p_mfc_hw_call(dev->mfc_ops, decode_one_frame, ctx,
 				last_frame);
 		return 0;
@@ -461,7 +460,6 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 	 * Now obtaining frames from MFC buffer */
 
 	s5p_mfc_clock_on();
-	s5p_mfc_clean_ctx_int_flags(ctx);
 
 	schedule_delayed_work(&dev->watchdog_work,
 			msecs_to_jiffies(MFC_WATCHDOG_TIMEOUT_MS));

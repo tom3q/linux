@@ -481,11 +481,6 @@ struct s5p_mfc_codec_ops {
  * @dev:		pointer to the s5p_mfc_dev of the device
  * @fh:			struct v4l2_fh
  * @num:		number of the context that this structure describes
- * @int_cond:		variable used by the waitqueue
- * @int_type:		type of the last interrupt
- * @int_err:		error number received from MFC hw in the interrupt
- * @queue:		waitqueue that can be used to wait for this context to
- *			finish
  * @src_fmt:		source pixelformat information
  * @dst_fmt:		destination pixelformat information
  * @vq_src:		vb2 queue for source buffers
@@ -555,11 +550,6 @@ struct s5p_mfc_ctx {
 	struct v4l2_fh fh;
 
 	int num;
-
-	int int_cond;
-	int int_type;
-	unsigned int int_err;
-	wait_queue_head_t queue;
 
 	struct s5p_mfc_fmt *src_fmt;
 	struct s5p_mfc_fmt *dst_fmt;

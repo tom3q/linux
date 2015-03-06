@@ -49,16 +49,6 @@ MODULE_PARM_DESC(mem, "Preallocated memory size for the firmware and context buf
 
 /* Helper functions for interrupt processing */
 
-/* Wake up context wait_queue */
-static void wake_up_ctx(struct s5p_mfc_ctx *ctx, unsigned int reason,
-			unsigned int err)
-{
-	ctx->int_cond = 1;
-	ctx->int_type = reason;
-	ctx->int_err = err;
-	wake_up(&ctx->queue);
-}
-
 /* Wake up device wait_queue */
 static void wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
 			unsigned int err)
@@ -112,9 +102,10 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		s5p_mfc_cleanup_queue(&ctx->dst_queue, &ctx->vq_dst);
 		s5p_mfc_cleanup_queue(&ctx->src_queue, &ctx->vq_src);
 		s5p_mfc_update_ctx_locked(ctx);
-		wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	}
+	clear_bit(0, &dev->enter_suspend);
 	__s5p_mfc_hw_unlock(dev);
+	wake_up_dev(dev, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	/* De-init MFC */
@@ -275,18 +266,11 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	}
 
 	s5p_mfc_clock_off();
-	if (ctx) {
+	if (ctx)
 		s5p_mfc_update_ctx_locked(ctx);
-		wake_up_ctx(ctx, reason, err);
-	}
-	s5p_mfc_hw_unlock(dev);
 
-	/*
-	 * If suspending, wake up device. s5p_mfc_try_run() will not schedule
-	 * with enter_suspend set.
-	 */
-	if (test_bit(0, &dev->enter_suspend))
-		wake_up_dev(dev, reason, err);
+	s5p_mfc_hw_unlock(dev);
+	wake_up_dev(dev, reason, err);
 
 	spin_unlock(&dev->irqlock);
 
@@ -301,6 +285,7 @@ irq_no_try_run:
 	wake_up_dev(dev, reason, err);
 
 	spin_unlock(&dev->irqlock);
+
 	mfc_debug_leave();
 	return IRQ_HANDLED;
 }
@@ -324,7 +309,6 @@ static int s5p_mfc_open(struct file *file)
 		ret = -ENOMEM;
 		goto err_alloc;
 	}
-	init_waitqueue_head(&ctx->queue);
 	v4l2_fh_init(&ctx->fh, vdev);
 	file->private_data = &ctx->fh;
 	v4l2_fh_add(&ctx->fh);
@@ -975,15 +959,16 @@ static int s5p_mfc_suspend(struct device *dev)
 	set_bit(0, &m_dev->enter_suspend);
 
 	/* Check if we're processing then wait if it necessary. */
-	ret = wait_event_interruptible_timeout(m_dev->queue,
-					!s5p_mfc_hw_trylock(m_dev),
-					msecs_to_jiffies(MFC_INT_TIMEOUT));
-	if (ret <= 0) {
-		if (!ret) {
-			mfc_err("Waiting for hardware to finish timed out\n");
-			ret = -EIO;
-		}
+	ret = wait_event_interruptible(m_dev->queue,
+				       !s5p_mfc_hw_trylock(m_dev));
+	if (ret < 0) {
+		/* Interrupted. */
 		goto err_clear_suspend;
+	}
+	if (!test_bit(0, &m_dev->enter_suspend)) {
+		/* Watchdog wake up. Abort. */
+		mfc_err("Watchdog wake up. Aborting suspend.\n");
+		goto err_unlock;
 	}
 
 	s5p_mfc_hw_unlock(m_dev);

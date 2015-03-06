@@ -1644,6 +1644,7 @@ static int s5p_mfc_enc_g_v_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct s5p_mfc_ctx *ctx = ctrl_to_ctx(ctrl);
 	struct s5p_mfc_dev *dev = ctx->dev;
+	int ret;
 
 	switch (ctrl->id) {
 	case V4L2_CID_MIN_BUFFERS_FOR_OUTPUT:
@@ -1656,8 +1657,12 @@ static int s5p_mfc_enc_g_v_ctrl(struct v4l2_ctrl *ctrl)
 			return -EINVAL;
 		}
 		/* Should wait for the header to be produced */
-		s5p_mfc_wait_for_done_ctx(ctx,
-				S5P_MFC_R2H_CMD_SEQ_DONE_RET, 0);
+		ret = s5p_mfc_wait_for_done_ctx(ctx);
+		if (ret) {
+			mfc_err("Waiting for context %d timed out\n",
+				ctx->num);
+			return ret;
+		}
 		if (ctx->state >= MFCINST_HEAD_PARSED &&
 		    ctx->state < MFCINST_ABORT) {
 			ctrl->val = ctx->pb_count;
@@ -1939,9 +1944,12 @@ static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 		if ((ctx->state == MFCINST_GOT_INST) &&
 			(dev->curr_ctx == ctx->num) &&
 		        s5p_mfc_hw_is_locked(dev)) {
-			s5p_mfc_wait_for_done_ctx(ctx,
-						S5P_MFC_R2H_CMD_SEQ_DONE_RET,
-						0);
+			int ret = s5p_mfc_wait_for_done_ctx(ctx);
+			if (ret) {
+				mfc_err("Waiting for context %d timed out\n",
+					ctx->num);
+				return ret;
+			}
 		}
 
 		if (ctx->src_bufs_cnt < ctx->pb_count) {
@@ -1967,8 +1975,9 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 		dev->curr_ctx == ctx->num &&
 		s5p_mfc_hw_is_locked(dev)) {
 		ctx->state = MFCINST_ABORT;
-		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_FRAME_DONE_RET,
-					  0);
+		if (s5p_mfc_wait_for_done_ctx(ctx))
+			mfc_err("Waiting for context %d timed out\n",
+				ctx->num);
 	}
 	ctx->state = MFCINST_FINISHED;
 	spin_lock_irqsave(&dev->irqlock, flags);
