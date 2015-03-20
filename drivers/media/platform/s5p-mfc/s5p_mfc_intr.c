@@ -20,6 +20,7 @@
 #include "s5p_mfc_common.h"
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_intr.h"
+#include "s5p_mfc_opr.h"
 
 int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev, int command)
 {

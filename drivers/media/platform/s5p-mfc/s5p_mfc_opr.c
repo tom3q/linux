@@ -22,6 +22,28 @@
 
 static struct s5p_mfc_hw_ops *s5p_mfc_ops;
 
+int s5p_mfc_hw_trylock(struct s5p_mfc_dev *dev)
+{
+	if (test_and_set_bit(0, &dev->hw_lock))
+		return -EBUSY;
+	return 0;
+}
+
+int __s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev)
+{
+	return test_and_clear_bit(0, &dev->hw_lock);
+}
+
+void s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev)
+{
+	WARN_ON(!__s5p_mfc_hw_unlock(dev));
+}
+
+bool s5p_mfc_hw_is_locked(struct s5p_mfc_dev *dev)
+{
+	return test_bit(0, &dev->hw_lock);
+}
+
 void s5p_mfc_init_hw_ops(struct s5p_mfc_dev *dev)
 {
 	if (IS_MFCV6_PLUS(dev)) {
@@ -392,7 +414,7 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 	}
 
 	/* Check whether hardware is not running */
-	if (test_and_set_bit(0, &dev->hw_lock) != 0) {
+	if (s5p_mfc_hw_trylock(dev) < 0) {
 		/* This is perfectly ok, the scheduled ctx should wait */
 		mfc_debug(1, "Couldn't lock HW.\n");
 		return;
@@ -402,11 +424,7 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 	new_ctx = s5p_mfc_get_new_ctx(dev);
 	if (new_ctx < 0) {
 		/* No contexts to run */
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0) {
-			mfc_err("Failed to unlock hardware.\n");
-			return;
-		}
-
+		s5p_mfc_hw_unlock(dev);
 		mfc_debug(1, "No ctx is scheduled to be run.\n");
 		return;
 	}
@@ -427,8 +445,7 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 	ret = s5p_mfc_run_ctx(dev, ctx);
 	if (ret) {
 		/* Free hardware lock */
-		if (test_and_clear_bit(0, &dev->hw_lock) == 0)
-			mfc_err("Failed to unlock hardware.\n");
+		s5p_mfc_hw_unlock(dev);
 
 		/* This is in deed imporant, as no operation has been
 		 * scheduled, reduce the clock count as no one will

@@ -1022,7 +1022,7 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 	spin_lock_irqsave(&dev->irqlock, flags);
 	if ((ctx->state == MFCINST_FINISHING ||
 		ctx->state ==  MFCINST_RUNNING) &&
-		dev->curr_ctx == ctx->num && dev->hw_lock) {
+		dev->curr_ctx == ctx->num && s5p_mfc_hw_is_locked(dev)) {
 		ctx->state = MFCINST_ABORT;
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 		s5p_mfc_wait_for_done_ctx(ctx,

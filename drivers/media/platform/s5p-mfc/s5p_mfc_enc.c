@@ -1901,7 +1901,8 @@ static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 			(q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)) {
 
 		if ((ctx->state == MFCINST_GOT_INST) &&
-			(dev->curr_ctx == ctx->num) && dev->hw_lock) {
+			(dev->curr_ctx == ctx->num) &&
+		        s5p_mfc_hw_is_locked(dev)) {
 			s5p_mfc_wait_for_done_ctx(ctx,
 						S5P_MFC_R2H_CMD_SEQ_DONE_RET,
 						0);
@@ -1930,7 +1931,8 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 
 	if ((ctx->state == MFCINST_FINISHING ||
 		ctx->state == MFCINST_RUNNING) &&
-		dev->curr_ctx == ctx->num && dev->hw_lock) {
+		dev->curr_ctx == ctx->num &&
+		s5p_mfc_hw_is_locked(dev)) {
 		ctx->state = MFCINST_ABORT;
 		s5p_mfc_wait_for_done_ctx(ctx, S5P_MFC_R2H_CMD_FRAME_DONE_RET,
 					  0);

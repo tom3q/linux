@@ -149,7 +149,7 @@ static void s5p_mfc_watchdog(struct timer_list *t)
 {
 	struct s5p_mfc_dev *dev = from_timer(dev, t, watchdog_timer);
 
-	if (test_bit(0, &dev->hw_lock))
+	if (s5p_mfc_hw_is_locked(dev))
 		atomic_inc(&dev->watchdog_cnt);
 	if (atomic_read(&dev->watchdog_cnt) >= MFC_WATCHDOG_CNT) {
 		/* This means that hw is busy and no interrupts were
@@ -195,7 +195,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		clear_work_bit(ctx);
 		wake_up_ctx(ctx, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	}
-	clear_bit(0, &dev->hw_lock);
+	__s5p_mfc_hw_unlock(dev);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	/* De-init MFC */
@@ -383,7 +383,7 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 		ctx->state = MFCINST_RES_CHANGE_INIT;
 		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 		wake_up_ctx(ctx, reason, err);
-		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+		s5p_mfc_hw_unlock(dev);
 		s5p_mfc_clock_off();
 		s5p_mfc_try_run(dev);
 		return;
@@ -455,7 +455,7 @@ leave_handle_frame:
 		clear_work_bit(ctx);
 	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	wake_up_ctx(ctx, reason, err);
-	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+	s5p_mfc_hw_unlock(dev);
 	s5p_mfc_clock_off();
 	/* if suspending, wake up device and do not try_run again*/
 	if (test_bit(0, &dev->enter_suspend))
@@ -503,7 +503,7 @@ static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
 
 	mfc_err("Interrupt Error: %08x\n", err);
 
-	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+	s5p_mfc_hw_unlock(dev);
 	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	s5p_mfc_clock_off();
 	wake_up_dev(dev, reason, err);
@@ -558,7 +558,7 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
 	}
 	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	clear_work_bit(ctx);
-	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+	s5p_mfc_hw_unlock(dev);
 	s5p_mfc_clock_off();
 	s5p_mfc_try_run(dev);
 	wake_up_ctx(ctx, reason, err);
@@ -593,14 +593,14 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 		} else {
 			ctx->dpb_flush_flag = 0;
 		}
-		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+		s5p_mfc_hw_unlock(dev);
 
 		s5p_mfc_clock_off();
 
 		wake_up(&ctx->queue);
 		s5p_mfc_try_run(dev);
 	} else {
-		WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+		s5p_mfc_hw_unlock(dev);
 
 		s5p_mfc_clock_off();
 
@@ -628,7 +628,7 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 
 	clear_work_bit(ctx);
 
-	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+	s5p_mfc_hw_unlock(dev);
 
 	s5p_mfc_clock_off();
 	wake_up(&ctx->queue);
@@ -672,7 +672,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 				break;
 			}
 			s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-			WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
+			s5p_mfc_hw_unlock(dev);
 			s5p_mfc_clock_off();
 			wake_up_ctx(ctx, reason, err);
 			s5p_mfc_try_run(dev);
@@ -702,7 +702,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		if (ctx)
 			clear_work_bit(ctx);
 		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-		clear_bit(0, &dev->hw_lock);
+		__s5p_mfc_hw_unlock(dev);
 		clear_bit(0, &dev->enter_suspend);
 		wake_up_dev(dev, reason, err);
 		break;
@@ -734,8 +734,7 @@ irq_cleanup_hw:
 	ctx->int_type = reason;
 	ctx->int_err = err;
 	ctx->int_cond = 1;
-	if (test_and_clear_bit(0, &dev->hw_lock) == 0)
-		mfc_err("Failed to unlock hw\n");
+	s5p_mfc_hw_unlock(dev);
 
 	s5p_mfc_clock_off();
 	clear_work_bit(ctx);
@@ -953,7 +952,7 @@ static int s5p_mfc_release(struct file *file)
 	}
 	/* hardware locking scheme */
 	if (dev->curr_ctx == ctx->num)
-		clear_bit(0, &dev->hw_lock);
+		__s5p_mfc_hw_unlock(dev);
 	dev->num_inst--;
 	if (dev->num_inst == 0) {
 		mfc_debug(2, "Last instance\n");
@@ -1432,7 +1431,7 @@ static int s5p_mfc_suspend(struct device *dev)
 	}
 
 	/* Check if we're processing then wait if it necessary. */
-	while (test_and_set_bit(0, &m_dev->hw_lock) != 0) {
+	while (s5p_mfc_hw_trylock(m_dev) < 0) {
 		/* Try and lock the HW */
 		/* Wait on the interrupt waitqueue */
 		ret = wait_event_interruptible_timeout(m_dev->queue,
@@ -1447,7 +1446,7 @@ static int s5p_mfc_suspend(struct device *dev)
 	ret = s5p_mfc_sleep(m_dev);
 	if (ret) {
 		clear_bit(0, &m_dev->enter_suspend);
-		clear_bit(0, &m_dev->hw_lock);
+		__s5p_mfc_hw_unlock(m_dev);
 	}
 	return ret;
 }
