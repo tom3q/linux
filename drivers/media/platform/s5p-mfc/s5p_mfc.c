@@ -83,42 +83,115 @@ void s5p_mfc_ctx_fatal_error_locked(struct s5p_mfc_ctx *ctx)
 	s5p_mfc_ctx_set_error(ctx);
 }
 
+/*
+ * NOTE: This function is carefully crafted to avoid deadlocks and race
+ * conditions with other processes. The comments should hopefully explain
+ * why this particular sequence is necessary.
+ */
 static void s5p_mfc_watchdog_worker(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct s5p_mfc_dev *dev;
+	struct s5p_mfc_dev *dev = container_of(dwork, struct s5p_mfc_dev,
+					       watchdog_work);
 	struct s5p_mfc_ctx *ctx;
 	unsigned long flags;
-	int mutex_locked;
 	int i, ret;
 
-	dev = container_of(dwork, struct s5p_mfc_dev, watchdog_work);
+	/*
+	 * We might have the following running in parallel with
+	 * this work:
+	 * - s5p_mfc_open(),
+	 * - s5p_mfc_release(),
+	 * - various V4L2 IOCTLs,
+	 * - system suspend handler.
+	 *
+	 * The first three acquire dev->mfc_mutex, so they are serialized.
+	 * However we cannot acquire this lock from here, because
+	 * they might be waiting for hardware to complete certain task.
+	 * System suspend handler is mutually exclusive with other ones.
+	 *
+	 * s5p_mfc_irq() is unlikely to be running, since this is a timeout
+	 * handler. However, we check for it unlocking the hardware before us
+	 * and hw error flag prevents it from execution.
+	 */
 
 	mfc_err("Driver timeout error handling\n");
-	/* Lock the mutex that protects open and release.
-	 * This is necessary as they may load and unload firmware. */
-	mutex_locked = mutex_trylock(&dev->mfc_mutex);
-	if (!mutex_locked)
-		mfc_err("Error: some instance may be closing/opening\n");
+
 	spin_lock_irqsave(&dev->irqlock, flags);
 
-	s5p_mfc_clock_off();
+	/* Interrupt handler might have arrived late. */
+	if (!s5p_mfc_hw_is_locked(dev)) {
+		spin_unlock_irqrestore(&dev->irqlock, flags);
+		return;
+	}
 
+	/* Prevent scheduling contexts and interrupt handling. */
+	s5p_mfc_set_hw_error(dev);
+
+	/*
+	 * Put all contexts into unrecoverable error state.
+	 * manipulations on dev->ctx[] and _locked helpers must happen
+	 * with dev->irqlock held.
+	 */
 	bitmap_zero(&dev->ctx_work_bits, MFC_NUM_CONTEXTS);
 	for (i = 0; i < MFC_NUM_CONTEXTS; i++) {
 		ctx = dev->ctx[i];
 		if (!ctx)
 			continue;
+		/* Spare contexts not relying on any hardware state yet. */
+		if (ctx->inst_no == MFC_NO_INSTANCE_SET)
+			continue;
 		s5p_mfc_ctx_fatal_error_locked(ctx);
 		s5p_mfc_update_ctx_locked(ctx);
 	}
+
+	/* Abort suspend, since hardware state is undefined. */
 	s5p_mfc_clear_suspended(dev);
 
+	/*
+	 * Unlock the hardware and wake up waiters.
+	 *
+	 * This might have following effects:
+	 * - any user context waiting on already existing contexts will fail
+	 *   current and any subsequent wait, since contexts in error state
+	 *   cannot be ready,
+	 * - any user context waiting on new contexts will keep waiting
+	 *   indefinitely, because we won't schedule context runs until the
+	 *   hw error flag is cleared,
+	 * - open of a new context does not schedule its execution,
+	 * - release of a new context will not try to schedule execution of
+	 *   cleanup run, because such context didn't have a chance to
+	 *   run initialization yet,
+	 * - suspend handler will wake up and abort instantly.
+	 */
 	__s5p_mfc_hw_unlock(dev);
 	s5p_mfc_wake_up_dev(dev, S5P_MFC_R2H_CMD_ERR_RET, 0);
+
+	/*
+	 * At this point we're not expecting anyone to access any data
+	 * protected by dev->irqlock. We need to release it to acquire
+	 * dev->open_release_mutex.
+	 */
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
-	/* De-init MFC */
+	/*
+	 * This mutex prevents further open and release calls, since they
+	 * include hardware initialization and deinitialization calls.
+	 * This also prevents changing dev->num_inst.
+	 */
+	mutex_lock(&dev->open_release_mutex);
+
+	/*
+	 * Opens, releases and context scheduling are halted, so we can
+	 * safely attempt to reinitialize the hardware. It is also possible
+	 * that between releasing dev->irqlock and acquiring
+	 * dev->open_release_mutex, someone actually reinitialized the
+	 * hardware. In such case we can skip it.
+	 */
+	if (!s5p_mfc_has_hw_error(dev))
+		goto exit_unlock;
+
+	/* De-init MFC. */
 	s5p_mfc_deinit_hw(dev);
 
 	/* Double check if there is at least one instance running.
@@ -127,15 +200,18 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		ret = s5p_mfc_load_firmware(dev);
 		if (ret) {
 			mfc_err("Failed to reload FW\n");
-			goto unlock;
+			goto exit_unlock;
 		}
+
+		/* Will clear hw error flag on success. */
 		ret = s5p_mfc_init_hw(dev);
 		if (ret)
 			mfc_err("Failed to reinit FW\n");
 	}
-unlock:
-	if (mutex_locked)
-		mutex_unlock(&dev->mfc_mutex);
+exit_unlock:
+	mutex_unlock(&dev->open_release_mutex);
+
+	s5p_mfc_try_run(dev);
 }
 
 /* Error handling for interrupt */
@@ -202,12 +278,25 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	/* Reset the timeout watchdog */
 	cancel_delayed_work(&dev->watchdog_work);
 	spin_lock(&dev->irqlock);
+
 	ctx = dev->ctx[dev->curr_ctx];
 	/* Get the reason of interrupt and the error code */
 	reason = s5p_mfc_hw_call(dev->mfc_ops, get_int_reason, dev);
 	err = s5p_mfc_hw_call(dev->mfc_ops, get_int_err, dev);
 	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	mfc_debug(1, "Int reason: %d (err: %08x)\n", reason, err);
+
+	/*
+	 * We are only expecting an interrupt if the hardware lock is acquired.
+	 * A spurious one may occur when handling hardware error in watchdog
+	 * worker and needs to be skipped.
+	 */
+	if (!s5p_mfc_hw_is_locked(dev)) {
+		mfc_debug(1, "Hardware not locked, ignoring interrupt.\n");
+		spin_unlock(&dev->irqlock);
+		return IRQ_HANDLED;
+	}
+
 	switch (reason) {
 	case S5P_MFC_R2H_CMD_ERR_RET:
 		/* An error has occurred */
@@ -291,11 +380,15 @@ static int s5p_mfc_open(struct file *file)
 	struct s5p_mfc_dev *dev = video_drvdata(file);
 	struct s5p_mfc_ctx *ctx = NULL;
 	struct vb2_queue *q;
+	unsigned long flags;
 	int ret = 0;
 
 	mfc_debug_enter();
-	if (mutex_lock_interruptible(&dev->mfc_mutex))
+	if (mutex_lock_interruptible(&dev->open_release_mutex))
 		return -ERESTARTSYS;
+	ret = mutex_lock_interruptible(&dev->mfc_mutex);
+	if (ret)
+		goto err_unlock_open_release;
 	dev->num_inst++;	/* It is guarded by mfc_mutex in vfd */
 	/* Allocate memory for context */
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
@@ -321,7 +414,11 @@ static int s5p_mfc_open(struct file *file)
 			goto err_no_ctx;
 		}
 	}
+
+	spin_lock_irqsave(&dev->irqlock, flags);
 	dev->ctx[ctx->num] = ctx;
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
 	if (vdev == dev->vfd_dec) {
 		ctx->type = MFCINST_DECODER;
 		ctx->c_ops = get_dec_codec_ops();
@@ -453,6 +550,8 @@ err_no_ctx:
 err_alloc:
 	dev->num_inst--;
 	mutex_unlock(&dev->mfc_mutex);
+err_unlock_open_release:
+	mutex_unlock(&dev->open_release_mutex);
 	mfc_debug_leave();
 	return ret;
 }
@@ -462,8 +561,10 @@ static int s5p_mfc_release(struct file *file)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(file->private_data);
 	struct s5p_mfc_dev *dev = ctx->dev;
+	unsigned long flags;
 
 	mfc_debug_enter();
+	mutex_lock(&dev->open_release_mutex);
 	mutex_lock(&dev->mfc_mutex);
 	vb2_queue_release(&ctx->vq_src);
 	vb2_queue_release(&ctx->vq_dst);
@@ -483,13 +584,18 @@ static int s5p_mfc_release(struct file *file)
 		if (s5p_mfc_power_off() < 0)
 			mfc_err("Power off failed\n");
 	}
+
+	spin_lock_irqsave(&dev->irqlock, flags);
 	dev->ctx[ctx->num] = NULL;
+	spin_unlock_irqrestore(&dev->irqlock, flags);
+
 	s5p_mfc_dec_ctrls_delete(ctx);
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
 	kfree(ctx);
 	mfc_debug_leave();
 	mutex_unlock(&dev->mfc_mutex);
+	mutex_unlock(&dev->open_release_mutex);
 	return 0;
 }
 
@@ -822,6 +928,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 	s5p_mfc_load_firmware(dev);
 
 	mutex_init(&dev->mfc_mutex);
+	mutex_init(&dev->open_release_mutex);
 	init_waitqueue_head(&dev->queue);
 	dev->flags = 0;
 	INIT_DELAYED_WORK(&dev->watchdog_work, s5p_mfc_watchdog_worker);

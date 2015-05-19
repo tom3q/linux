@@ -274,6 +274,7 @@ int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 		(ver >> 16) & 0xFF, (ver >> 8) & 0xFF, ver & 0xFF);
 
 	s5p_mfc_clock_off();
+	s5p_mfc_clear_hw_error(dev);
 	mfc_debug_leave();
 	return 0;
 

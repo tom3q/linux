@@ -396,6 +396,11 @@ static int s5p_mfc_try_run_once(struct s5p_mfc_dev *dev)
 
 	mfc_debug(1, "Try run dev: %p\n", dev);
 
+	if (s5p_mfc_has_hw_error(dev)) {
+		mfc_debug(1, "HW is reinitializing, so do not schedule any jobs\n");
+		return 0;
+	}
+
 	if (s5p_mfc_is_suspended(dev)) {
 		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
 		return 0;

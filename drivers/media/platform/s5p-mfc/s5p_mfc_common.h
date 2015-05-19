@@ -266,6 +266,7 @@ struct s5p_mfc_priv_buf {
  * @condlock:		lock for changing/checking if a context is ready to be
  *			processed
  * @mfc_mutex:		lock for video_device
+ * @open_release_mutex:	Synchronizes opening/releasing instances with watchdog.
  * @int_type:		type of last interrupt
  * @int_err:		error number for last interrupt
  * @queue:		waitqueue for waiting for completion of device commands
@@ -303,6 +304,7 @@ struct s5p_mfc_dev {
 	spinlock_t condlock;	/* lock when changing/checking if a context is
 					ready to be processed */
 	struct mutex mfc_mutex; /* video_device lock */
+	struct mutex open_release_mutex;
 	int int_type;
 	unsigned int int_err;
 	wait_queue_head_t queue;
@@ -330,10 +332,12 @@ struct s5p_mfc_dev {
 /** enum s5p_mfc_dev_flags - helper flags for tracking driver state
  * @S5P_MFC_DEV_HW_LOCKED:	used for hardware locking
  * @S5P_MFC_DEV_SUSPENDED:	flag set when entering suspend
+ * @S5P_MFC_DEV_HW_ERROR:	hardware needs reinitialization
  */
 enum s5p_mfc_dev_flags {
 	S5P_MFC_DEV_HW_LOCKED,
 	S5P_MFC_DEV_SUSPENDED,
+	S5P_MFC_DEV_HW_ERROR,
 };
 
 static inline int s5p_mfc_hw_trylock(struct s5p_mfc_dev *dev)
@@ -371,6 +375,21 @@ static inline void s5p_mfc_clear_suspended(struct s5p_mfc_dev *dev)
 static inline bool s5p_mfc_is_suspended(struct s5p_mfc_dev *dev)
 {
 	return test_bit(S5P_MFC_DEV_SUSPENDED, &dev->flags);
+}
+
+static inline void s5p_mfc_set_hw_error(struct s5p_mfc_dev *dev)
+{
+	set_bit(S5P_MFC_DEV_HW_ERROR, &dev->flags);
+}
+
+static inline void s5p_mfc_clear_hw_error(struct s5p_mfc_dev *dev)
+{
+	clear_bit(S5P_MFC_DEV_HW_ERROR, &dev->flags);
+}
+
+static inline bool s5p_mfc_has_hw_error(struct s5p_mfc_dev *dev)
+{
+	return test_bit(S5P_MFC_DEV_HW_ERROR, &dev->flags);
 }
 
 /**
