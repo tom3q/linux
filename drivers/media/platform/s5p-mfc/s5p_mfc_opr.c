@@ -12,6 +12,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/bitops.h>
 #include "s5p_mfc_cmd.h"
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_intr.h"
@@ -397,6 +398,26 @@ static int s5p_mfc_run_ctx(struct s5p_mfc_dev *dev,
 	}
 
 	return ret;
+}
+
+static int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
+{
+	unsigned long flags;
+	int ctx;
+
+	spin_lock_irqsave(&dev->condlock, flags);
+
+	/* Start searching from context next to current. */
+	ctx = dev->curr_ctx + 1;
+	if (ctx < MFC_NUM_CONTEXTS)
+		ctx = find_next_bit(&dev->ctx_work_bits, MFC_NUM_CONTEXTS, ctx);
+	/* Search again from the beginning if not found. */
+	if (ctx == MFC_NUM_CONTEXTS)
+		ctx = find_first_bit(&dev->ctx_work_bits, MFC_NUM_CONTEXTS);
+
+	spin_unlock_irqrestore(&dev->condlock, flags);
+
+	return ctx == MFC_NUM_CONTEXTS ? -EAGAIN : ctx;
 }
 
 /* Try running an operation on hardware */

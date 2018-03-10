@@ -10,7 +10,6 @@
  * (at your option) any later version.
  */
 
-#include <linux/bitops.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
@@ -90,26 +89,6 @@ void set_work_bit_irqsave(struct s5p_mfc_ctx *ctx)
 	spin_lock_irqsave(&dev->condlock, flags);
 	__set_bit(ctx->num, &dev->ctx_work_bits);
 	spin_unlock_irqrestore(&dev->condlock, flags);
-}
-
-int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
-{
-	unsigned long flags;
-	int ctx;
-
-	spin_lock_irqsave(&dev->condlock, flags);
-
-	/* Start searching from context next to current. */
-	ctx = dev->curr_ctx + 1;
-	if (ctx < MFC_NUM_CONTEXTS)
-		ctx = find_next_bit(&dev->ctx_work_bits, MFC_NUM_CONTEXTS, ctx);
-	/* Search again from the beginning if not found. */
-	if (ctx == MFC_NUM_CONTEXTS)
-		ctx = find_first_bit(&dev->ctx_work_bits, MFC_NUM_CONTEXTS);
-
-	spin_unlock_irqrestore(&dev->condlock, flags);
-
-	return ctx == MFC_NUM_CONTEXTS ? -EAGAIN : ctx;
 }
 
 /* Wake up context wait_queue */
