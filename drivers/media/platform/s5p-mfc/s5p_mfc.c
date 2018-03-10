@@ -362,11 +362,6 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx,
 	if (res_change == S5P_FIMV_RES_INCREASE ||
 		res_change == S5P_FIMV_RES_DECREASE) {
 		ctx->state = MFCINST_RES_CHANGE_INIT;
-		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-		wake_up_ctx(ctx, reason, err);
-		s5p_mfc_hw_unlock(dev);
-		s5p_mfc_clock_off();
-		s5p_mfc_try_run(dev);
 		return;
 	}
 	if (ctx->dpb_flush_flag)
@@ -434,15 +429,6 @@ leave_handle_frame:
 	if ((ctx->src_queue_cnt == 0 && ctx->state != MFCINST_FINISHING)
 				    || ctx->dst_queue_cnt < ctx->pb_count)
 		clear_work_bit(ctx);
-	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-	wake_up_ctx(ctx, reason, err);
-	s5p_mfc_hw_unlock(dev);
-	s5p_mfc_clock_off();
-	/* if suspending, wake up device and do not try_run again*/
-	if (test_bit(0, &dev->enter_suspend))
-		wake_up_dev(dev, reason, err);
-	else
-		s5p_mfc_try_run(dev);
 }
 
 /* Error handling for interrupt */
@@ -479,20 +465,14 @@ static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
 
 		clear_work_bit(ctx);
 		ctx->state = MFCINST_ERROR;
-		wake_up_ctx(ctx, reason, err);
 	}
 
 	mfc_err("Interrupt Error: %08x\n", err);
 
-	s5p_mfc_hw_unlock(dev);
-	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-	s5p_mfc_clock_off();
-	wake_up_dev(dev, reason, err);
 }
 
 /* Header parsing interrupt handling */
-static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
-				 unsigned int reason, unsigned int err)
+static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev;
 
@@ -535,17 +515,11 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx,
 			ctx->head_processed = 1;
 		}
 	}
-	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	clear_work_bit(ctx);
-	s5p_mfc_hw_unlock(dev);
-	s5p_mfc_clock_off();
-	s5p_mfc_try_run(dev);
-	wake_up_ctx(ctx, reason, err);
 }
 
 /* Header parsing interrupt handling */
-static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
-				 unsigned int reason, unsigned int err)
+static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx, unsigned int err)
 {
 	struct s5p_mfc_buf *src_buf;
 	struct s5p_mfc_dev *dev;
@@ -553,43 +527,27 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx,
 	if (!ctx)
 		return;
 	dev = ctx->dev;
-	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-	ctx->int_type = reason;
-	ctx->int_err = err;
-	ctx->int_cond = 1;
 	clear_work_bit(ctx);
-	if (err == 0) {
-		ctx->state = MFCINST_RUNNING;
-		if (!ctx->dpb_flush_flag && ctx->head_processed) {
-			if (!list_empty(&ctx->src_queue)) {
-				src_buf = list_entry(ctx->src_queue.next,
-					     struct s5p_mfc_buf, list);
-				list_del(&src_buf->list);
-				ctx->src_queue_cnt--;
-				vb2_buffer_done(&src_buf->b->vb2_buf,
-						VB2_BUF_STATE_DONE);
-			}
-		} else {
-			ctx->dpb_flush_flag = 0;
+	if (err)
+		return;
+
+	ctx->state = MFCINST_RUNNING;
+	if (!ctx->dpb_flush_flag && ctx->head_processed) {
+		if (!list_empty(&ctx->src_queue)) {
+			src_buf = list_entry(ctx->src_queue.next,
+				     struct s5p_mfc_buf, list);
+			list_del(&src_buf->list);
+			ctx->src_queue_cnt--;
+			vb2_buffer_done(&src_buf->b->vb2_buf,
+					VB2_BUF_STATE_DONE);
 		}
-		s5p_mfc_hw_unlock(dev);
-
-		s5p_mfc_clock_off();
-
-		wake_up(&ctx->queue);
-		s5p_mfc_try_run(dev);
 	} else {
-		s5p_mfc_hw_unlock(dev);
-
-		s5p_mfc_clock_off();
-
-		wake_up(&ctx->queue);
+		ctx->dpb_flush_flag = 0;
 	}
 }
 
 static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 {
-	struct s5p_mfc_dev *dev = ctx->dev;
 	struct s5p_mfc_buf *mb_entry;
 
 	mfc_debug(2, "Stream completed\n");
@@ -606,12 +564,6 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 	}
 
 	clear_work_bit(ctx);
-
-	s5p_mfc_hw_unlock(dev);
-
-	s5p_mfc_clock_off();
-	wake_up(&ctx->queue);
-	s5p_mfc_try_run(dev);
 }
 
 /* Interrupt processing */
@@ -630,11 +582,14 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	/* Get the reason of interrupt and the error code */
 	reason = s5p_mfc_hw_call(dev->mfc_ops, get_int_reason, dev);
 	err = s5p_mfc_hw_call(dev->mfc_ops, get_int_err, dev);
+	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	mfc_debug(1, "Int reason: %d (err: %08x)\n", reason, err);
 	switch (reason) {
 	case S5P_MFC_R2H_CMD_ERR_RET:
 		/* An error has occurred */
 		s5p_mfc_handle_error(dev, ctx, reason, err);
+		if (!ctx)
+			goto irq_no_try_run;
 		break;
 
 	case S5P_MFC_R2H_CMD_SLICE_DONE_RET:
@@ -646,33 +601,27 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 
 			if (ctx->state == MFCINST_FINISHING &&
 						list_empty(&ctx->ref_queue)) {
-				s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 				s5p_mfc_handle_stream_complete(ctx);
 				break;
 			}
-			s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-			s5p_mfc_hw_unlock(dev);
-			s5p_mfc_clock_off();
-			wake_up_ctx(ctx, reason, err);
-			s5p_mfc_try_run(dev);
 		} else {
 			s5p_mfc_handle_frame(ctx, reason, err);
 		}
 		break;
 
 	case S5P_MFC_R2H_CMD_SEQ_DONE_RET:
-		s5p_mfc_handle_seq_done(ctx, reason, err);
+		s5p_mfc_handle_seq_done(ctx);
 		break;
 
 	case S5P_MFC_R2H_CMD_OPEN_INSTANCE_RET:
 		ctx->inst_no = s5p_mfc_hw_call(dev->mfc_ops, get_inst_no, dev);
 		ctx->state = MFCINST_GOT_INST;
-		goto irq_cleanup_hw;
+		break;
 
 	case S5P_MFC_R2H_CMD_CLOSE_INSTANCE_RET:
 		ctx->inst_no = MFC_NO_INSTANCE_SET;
 		ctx->state = MFCINST_FREE;
-		goto irq_cleanup_hw;
+		break;
 
 	case S5P_MFC_R2H_CMD_SYS_INIT_RET:
 	case S5P_MFC_R2H_CMD_FW_STATUS_RET:
@@ -680,47 +629,51 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	case S5P_MFC_R2H_CMD_WAKEUP_RET:
 		if (ctx)
 			clear_work_bit(ctx);
-		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-		s5p_mfc_hw_unlock(dev);
-		wake_up_dev(dev, reason, err);
-		break;
+		goto irq_no_try_run;
 
 	case S5P_MFC_R2H_CMD_INIT_BUFFERS_RET:
-		s5p_mfc_handle_init_buffers(ctx, reason, err);
+		s5p_mfc_handle_init_buffers(ctx, err);
 		break;
 
 	case S5P_MFC_R2H_CMD_COMPLETE_SEQ_RET:
-		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-		ctx->int_type = reason;
-		ctx->int_err = err;
 		s5p_mfc_handle_stream_complete(ctx);
 		break;
 
 	case S5P_MFC_R2H_CMD_DPB_FLUSH_RET:
 		ctx->state = MFCINST_RUNNING;
-		goto irq_cleanup_hw;
+		break;
 
 	default:
 		mfc_debug(2, "Unknown int reason\n");
 		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	}
-	spin_unlock(&dev->irqlock);
-	mfc_debug_leave();
-	return IRQ_HANDLED;
-irq_cleanup_hw:
-	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-	ctx->int_type = reason;
-	ctx->int_err = err;
-	ctx->int_cond = 1;
-	s5p_mfc_hw_unlock(dev);
 
 	s5p_mfc_clock_off();
-	clear_work_bit(ctx);
-	wake_up(&ctx->queue);
+	if (ctx)
+		wake_up_ctx(ctx, reason, err);
+	s5p_mfc_hw_unlock(dev);
 
-	s5p_mfc_try_run(dev);
+	/*
+	 * If suspending, wake up device. s5p_mfc_try_run() will not schedule
+	 * with enter_suspend set.
+	 */
+	if (test_bit(0, &dev->enter_suspend))
+		wake_up_dev(dev, reason, err);
+
 	spin_unlock(&dev->irqlock);
-	mfc_debug(2, "Exit via irq_cleanup_hw\n");
+
+	/* This can be run from user context as well, so don't lock. */
+	s5p_mfc_try_run(dev);
+
+	mfc_debug_leave();
+	return IRQ_HANDLED;
+
+irq_no_try_run:
+	__s5p_mfc_hw_unlock(dev);
+	wake_up_dev(dev, reason, err);
+
+	spin_unlock(&dev->irqlock);
+	mfc_debug_leave();
 	return IRQ_HANDLED;
 }
 
