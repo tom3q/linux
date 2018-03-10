@@ -281,13 +281,24 @@ struct s5p_mfc_hw_ops {
 	void (*release_dev_context_buffer)(struct s5p_mfc_dev *dev);
 	void (*dec_calc_dpb_size)(struct s5p_mfc_ctx *ctx);
 	void (*enc_calc_src_size)(struct s5p_mfc_ctx *ctx);
+	void (*set_dec_stream_buffer)(struct s5p_mfc_ctx *ctx,
+			int buf_addr, unsigned int start_num_byte,
+			unsigned int strm_size);
 	int (*set_enc_stream_buffer)(struct s5p_mfc_ctx *ctx,
 			unsigned long addr, unsigned int size);
+	int (*set_dec_frame_buffer)(struct s5p_mfc_ctx *ctx);
 	void (*set_enc_frame_buffer)(struct s5p_mfc_ctx *ctx,
 			unsigned long y_addr, unsigned long c_addr);
+	void (*set_enc_null_frame)(struct s5p_mfc_ctx *ctx);
 	void (*get_enc_frame_buffer)(struct s5p_mfc_ctx *ctx,
 			unsigned long *y_addr, unsigned long *c_addr);
-	int (*run_ctx)(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx);
+	void (*set_dec_desc_buffer)(struct s5p_mfc_ctx *ctx);
+	void (*set_enc_ref_buffer)(struct s5p_mfc_ctx *ctx);
+	void (*init_decode)(struct s5p_mfc_ctx *ctx);
+	void (*init_encode)(struct s5p_mfc_ctx *ctx);
+	void (*decode_one_frame)(struct s5p_mfc_ctx *ctx,
+			enum s5p_mfc_decode_arg last_frame);
+	void (*encode_one_frame)(struct s5p_mfc_ctx *ctx);
 	void (*clear_int_flags)(struct s5p_mfc_dev *dev);
 	int (*get_dspl_y_adr)(struct s5p_mfc_dev *dev);
 	int (*get_dec_y_adr)(struct s5p_mfc_dev *dev);
@@ -311,7 +322,16 @@ struct s5p_mfc_hw_ops {
 	unsigned int (*get_pic_type_bot)(struct s5p_mfc_ctx *ctx);
 	unsigned int (*get_crop_info_h)(struct s5p_mfc_ctx *ctx);
 	unsigned int (*get_crop_info_v)(struct s5p_mfc_ctx *ctx);
+
+	/* Called from s5p_mfc_run_ctx(). */
+	void (*run_dec_last_frames)(struct s5p_mfc_ctx *ctx);
+	void (*set_flush)(struct s5p_mfc_ctx *ctx, int flush);
+	void (*run_res_change)(struct s5p_mfc_ctx *ctx);
+	int (*run_init_enc_buffers)(struct s5p_mfc_ctx *ctx);
 };
+
+int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx,
+			  enum s5p_mfc_decode_arg last_frame);
 
 void s5p_mfc_init_hw_ops(struct s5p_mfc_dev *dev);
 void s5p_mfc_init_regs(struct s5p_mfc_dev *dev);
