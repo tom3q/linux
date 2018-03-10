@@ -125,7 +125,6 @@ static void wake_up_ctx(struct s5p_mfc_ctx *ctx, unsigned int reason,
 static void wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
 			unsigned int err)
 {
-	dev->int_cond = 1;
 	dev->int_type = reason;
 	dev->int_err = err;
 	wake_up(&dev->queue);
@@ -681,7 +680,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		if (ctx)
 			clear_work_bit(ctx);
 		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
-		__s5p_mfc_hw_unlock(dev);
+		s5p_mfc_hw_unlock(dev);
 		wake_up_dev(dev, reason, err);
 		break;
 

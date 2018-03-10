@@ -266,7 +266,6 @@ struct s5p_mfc_priv_buf {
  * @condlock:		lock for changing/checking if a context is ready to be
  *			processed
  * @mfc_mutex:		lock for video_device
- * @int_cond:		variable used by the waitqueue
  * @int_type:		type of last interrupt
  * @int_err:		error number for last interrupt
  * @queue:		waitqueue for waiting for completion of device commands
@@ -307,7 +306,6 @@ struct s5p_mfc_dev {
 	spinlock_t condlock;	/* lock when changing/checking if a context is
 					ready to be processed */
 	struct mutex mfc_mutex; /* video_device lock */
-	int int_cond;
 	int int_type;
 	unsigned int int_err;
 	wait_queue_head_t queue;

@@ -27,29 +27,23 @@ int s5p_mfc_wait_for_done_dev(struct s5p_mfc_dev *dev, int command)
 	int ret;
 
 	ret = wait_event_interruptible_timeout(dev->queue,
-		(dev->int_cond && (dev->int_type == command
-		|| dev->int_type == S5P_MFC_R2H_CMD_ERR_RET)),
+		!s5p_mfc_hw_is_locked(dev),
 		msecs_to_jiffies(MFC_INT_TIMEOUT));
 	if (ret == 0) {
 		mfc_err("Interrupt (dev->int_type:%d, command:%d) timed out\n",
 							dev->int_type, command);
-		return 1;
+		return -ETIMEDOUT;
 	} else if (ret == -ERESTARTSYS) {
 		mfc_err("Interrupted by a signal\n");
-		return 1;
+		return -ERESTARTSYS;
 	}
 	mfc_debug(1, "Finished waiting (dev->int_type:%d, command: %d)\n",
 							dev->int_type, command);
-	if (dev->int_type == S5P_MFC_R2H_CMD_ERR_RET)
-		return 1;
+	if (dev->int_type == S5P_MFC_R2H_CMD_ERR_RET || dev->int_err != 0)
+		return -EIO;
+	if (dev->int_type != command)
+		return -EINVAL;
 	return 0;
-}
-
-void s5p_mfc_clean_dev_int_flags(struct s5p_mfc_dev *dev)
-{
-	dev->int_cond = 0;
-	dev->int_type = 0;
-	dev->int_err = 0;
 }
 
 int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx,
