@@ -468,38 +468,47 @@ leave_handle_frame:
 static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
 		struct s5p_mfc_ctx *ctx, unsigned int reason, unsigned int err)
 {
-	mfc_err("Interrupt Error: %08x\n", err);
-
 	if (ctx) {
+		int dec_err;
+
 		/* Error recovery is dependent on the state of context */
 		switch (ctx->state) {
+		case MFCINST_RUNNING:
+			dec_err = s5p_mfc_hw_call(dev->mfc_ops, err_dec, err);
+			if (dec_err >= dev->warn_start ||
+			    err == S5P_FIMV_ERR_NO_VALID_SEQ_HDR ||
+			    err == S5P_FIMV_ERR_INCOMPLETE_FRAME ||
+			    err == S5P_FIMV_ERR_TIMEOUT) {
+				s5p_mfc_handle_frame(ctx, reason, err);
+				return;
+			}
+			/* Intentional fall-through. */
 		case MFCINST_RES_CHANGE_INIT:
 		case MFCINST_RES_CHANGE_FLUSH:
 		case MFCINST_RES_CHANGE_END:
 		case MFCINST_FINISHING:
 		case MFCINST_FINISHED:
-		case MFCINST_RUNNING:
-			/* It is highly probable that an error occurred
-			 * while decoding a frame */
-			clear_work_bit(ctx);
-			ctx->state = MFCINST_ERROR;
 			/* Mark all dst buffers as having an error */
 			s5p_mfc_cleanup_queue(&ctx->dst_queue, &ctx->vq_dst);
 			/* Mark all src buffers as having an error */
 			s5p_mfc_cleanup_queue(&ctx->src_queue, &ctx->vq_src);
-			wake_up_ctx(ctx, reason, err);
-			break;
 		default:
-			clear_work_bit(ctx);
-			ctx->state = MFCINST_ERROR;
-			wake_up_ctx(ctx, reason, err);
 			break;
 		}
+
+		clear_work_bit(ctx);
+		ctx->state = MFCINST_ERROR;
+		wake_up_ctx(ctx, reason, err);
 	}
+
+	mfc_err("Interrupt Error: %08x\n", err);
+
 	WARN_ON(test_and_clear_bit(0, &dev->hw_lock) == 0);
 	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	s5p_mfc_clock_off();
 	wake_up_dev(dev, reason, err);
+
+	clear_bit(0, &dev->enter_suspend);
 }
 
 /* Header parsing interrupt handling */
@@ -646,16 +655,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	switch (reason) {
 	case S5P_MFC_R2H_CMD_ERR_RET:
 		/* An error has occurred */
-		if (ctx->state == MFCINST_RUNNING &&
-			(s5p_mfc_hw_call(dev->mfc_ops, err_dec, err) >=
-				dev->warn_start ||
-				err == S5P_FIMV_ERR_NO_VALID_SEQ_HDR ||
-				err == S5P_FIMV_ERR_INCOMPLETE_FRAME ||
-				err == S5P_FIMV_ERR_TIMEOUT))
-			s5p_mfc_handle_frame(ctx, reason, err);
-		else
-			s5p_mfc_handle_error(dev, ctx, reason, err);
-		clear_bit(0, &dev->enter_suspend);
+		s5p_mfc_handle_error(dev, ctx, reason, err);
 		break;
 
 	case S5P_MFC_R2H_CMD_SLICE_DONE_RET:
