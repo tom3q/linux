@@ -153,7 +153,6 @@ static int s5p_mfc_close_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 
 /* Initialize cmd function pointers for MFC v5 */
 static struct s5p_mfc_hw_cmds s5p_mfc_cmds_v5 = {
-	.cmd_host2risc = s5p_mfc_cmd_host2risc_v5,
 	.sys_init_cmd = s5p_mfc_sys_init_cmd_v5,
 	.sleep_cmd = s5p_mfc_sleep_cmd_v5,
 	.wakeup_cmd = s5p_mfc_wakeup_cmd_v5,

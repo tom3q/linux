@@ -26,7 +26,7 @@
 #include <asm/cacheflush.h>
 
 #include "s5p_mfc_common.h"
-#include "s5p_mfc_cmd.h"
+#include "s5p_mfc_cmd_v6.h"
 #include "s5p_mfc_intr.h"
 #include "s5p_mfc_pm.h"
 #include "s5p_mfc_debug.h"
@@ -503,8 +503,7 @@ static int s5p_mfc_set_dec_frame_buffer_v6(struct s5p_mfc_ctx *ctx)
 	}
 
 	writel(ctx->inst_no, mfc_regs->instance_id);
-	s5p_mfc_hw_call(dev->mfc_cmds, cmd_host2risc, dev,
-			S5P_FIMV_CH_INIT_BUFS_V6, NULL);
+	s5p_mfc_cmd_host2risc_v6(dev, S5P_FIMV_CH_INIT_BUFS_V6);
 
 	mfc_debug(2, "After setting buffers.\n");
 	return 0;
@@ -606,8 +605,7 @@ static int s5p_mfc_set_enc_ref_buffer_v6(struct s5p_mfc_ctx *ctx)
 	}
 
 	writel(ctx->inst_no, mfc_regs->instance_id);
-	s5p_mfc_hw_call(dev->mfc_cmds, cmd_host2risc, dev,
-			S5P_FIMV_CH_INIT_BUFS_V6, NULL);
+	s5p_mfc_cmd_host2risc_v6(dev, S5P_FIMV_CH_INIT_BUFS_V6);
 
 	mfc_debug_leave();
 
@@ -1381,8 +1379,7 @@ static void s5p_mfc_init_decode_v6(struct s5p_mfc_ctx *ctx)
 	writel(ctx->sei_fp_parse & 0x1, mfc_regs->d_sei_enable);
 
 	writel(ctx->inst_no, mfc_regs->instance_id);
-	s5p_mfc_hw_call(dev->mfc_cmds, cmd_host2risc, dev,
-			S5P_FIMV_CH_SEQ_HEADER_V6, NULL);
+	s5p_mfc_cmd_host2risc_v6(dev, S5P_FIMV_CH_SEQ_HEADER_V6);
 
 	mfc_debug_leave();
 }
@@ -1395,8 +1392,7 @@ static void s5p_mfc_set_flush_v6(struct s5p_mfc_ctx *ctx, int flush)
 	if (flush) {
 		dev->curr_ctx = ctx->num;
 		writel(ctx->inst_no, mfc_regs->instance_id);
-		s5p_mfc_hw_call(dev->mfc_cmds, cmd_host2risc, dev,
-				S5P_FIMV_H2R_CMD_FLUSH_V6, NULL);
+		s5p_mfc_cmd_host2risc_v6(dev, S5P_FIMV_H2R_CMD_FLUSH_V6);
 	}
 }
 
@@ -1415,12 +1411,10 @@ static void s5p_mfc_decode_one_frame_v6(struct s5p_mfc_ctx *ctx,
 	 * is the last frame or not. */
 	switch (last_frame) {
 	case 0:
-		s5p_mfc_hw_call(dev->mfc_cmds, cmd_host2risc, dev,
-				S5P_FIMV_CH_FRAME_START_V6, NULL);
+		s5p_mfc_cmd_host2risc_v6(dev, S5P_FIMV_CH_FRAME_START_V6);
 		break;
 	case 1:
-		s5p_mfc_hw_call(dev->mfc_cmds, cmd_host2risc, dev,
-				S5P_FIMV_CH_LAST_FRAME_V6, NULL);
+		s5p_mfc_cmd_host2risc_v6(dev, S5P_FIMV_CH_LAST_FRAME_V6);
 		break;
 	default:
 		mfc_err("Unsupported last frame arg.\n");
@@ -1456,8 +1450,7 @@ static void s5p_mfc_init_encode_v6(struct s5p_mfc_ctx *ctx)
 	}
 
 	writel(ctx->inst_no, mfc_regs->instance_id);
-	s5p_mfc_hw_call(dev->mfc_cmds, cmd_host2risc, dev,
-			S5P_FIMV_CH_SEQ_HEADER_V6, NULL);
+	s5p_mfc_cmd_host2risc_v6(dev, S5P_FIMV_CH_SEQ_HEADER_V6);
 }
 
 static int s5p_mfc_h264_set_aso_slice_order_v6(struct s5p_mfc_ctx *ctx)
@@ -1499,7 +1492,7 @@ static void s5p_mfc_encode_one_frame_v6(struct s5p_mfc_ctx *ctx)
 		cmd = S5P_FIMV_CH_LAST_FRAME_V6;
 
 	writel(ctx->inst_no, mfc_regs->instance_id);
-	s5p_mfc_hw_call(dev->mfc_cmds, cmd_host2risc, dev, cmd, NULL);
+	s5p_mfc_cmd_host2risc_v6(dev, cmd);
 
 	mfc_debug(2, "--\n");
 }
