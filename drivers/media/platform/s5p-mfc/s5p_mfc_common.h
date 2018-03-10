@@ -54,9 +54,7 @@
 /* Busy wait timeout */
 #define MFC_BW_TIMEOUT		500
 /* Watchdog interval */
-#define MFC_WATCHDOG_INTERVAL   1000
-/* After how many executions watchdog should assume lock up */
-#define MFC_WATCHDOG_CNT        10
+#define MFC_WATCHDOG_TIMEOUT_MS	10000
 #define MFC_NO_INSTANCE_SET	-1
 #define MFC_ENC_CAP_PLANE_COUNT	1
 #define MFC_ENC_OUT_PLANE_COUNT	2
@@ -279,8 +277,6 @@ struct s5p_mfc_priv_buf {
  * @ctx:		array of driver contexts
  * @curr_ctx:		number of the currently running context
  * @ctx_work_bits:	used to mark which contexts are waiting for hardware
- * @watchdog_cnt:	counter for the watchdog
- * @watchdog_workqueue:	workqueue for the watchdog
  * @watchdog_work:	worker for the watchdog
  * @enter_suspend:	flag set when entering suspend
  * @ctx_buf:		common context memory (MFCv6)
@@ -325,10 +321,7 @@ struct s5p_mfc_dev {
 	struct s5p_mfc_ctx *ctx[MFC_NUM_CONTEXTS];
 	int curr_ctx;
 	unsigned long ctx_work_bits;
-	atomic_t watchdog_cnt;
-	struct timer_list watchdog_timer;
-	struct workqueue_struct *watchdog_workqueue;
-	struct work_struct watchdog_work;
+	struct delayed_work watchdog_work;
 	unsigned long enter_suspend;
 
 	struct s5p_mfc_priv_buf ctx_buf;

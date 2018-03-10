@@ -442,8 +442,14 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 	s5p_mfc_clock_on();
 	s5p_mfc_clean_ctx_int_flags(ctx);
 
+	schedule_delayed_work(&dev->watchdog_work,
+			msecs_to_jiffies(MFC_WATCHDOG_TIMEOUT_MS));
+
 	ret = s5p_mfc_run_ctx(dev, ctx);
 	if (ret) {
+		/* Cancel the watchdog. */
+		cancel_delayed_work(&dev->watchdog_work);
+
 		/* Free hardware lock */
 		s5p_mfc_hw_unlock(dev);
 
