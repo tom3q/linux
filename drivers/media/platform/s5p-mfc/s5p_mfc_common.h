@@ -480,10 +480,6 @@ struct s5p_mfc_codec_ops {
 	int (*post_frame_start) (struct s5p_mfc_ctx *ctx);
 };
 
-#define call_cop(c, op, args...)				\
-	(((c)->c_ops->op) ?					\
-		((c)->c_ops->op(args)) : 0)
-
 /**
  * struct s5p_mfc_ctx - This struct contains the instance context
  *
