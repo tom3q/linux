@@ -937,53 +937,42 @@ static int s5p_mfc_release(struct file *file)
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(file->private_data);
 	struct s5p_mfc_dev *dev = ctx->dev;
 
-	/* if dev is null, do cleanup that doesn't need dev */
 	mfc_debug_enter();
-	if (dev)
-		mutex_lock(&dev->mfc_mutex);
+	mutex_lock(&dev->mfc_mutex);
 	vb2_queue_release(&ctx->vq_src);
 	vb2_queue_release(&ctx->vq_dst);
-	if (dev) {
-		s5p_mfc_clock_on();
+	s5p_mfc_clock_on();
 
-		/* Mark context as idle */
-		clear_work_bit_irqsave(ctx);
-		/*
-		 * If instance was initialised and not yet freed,
-		 * return instance and free resources
-		*/
-		if (ctx->state != MFCINST_FREE && ctx->state != MFCINST_INIT) {
-			mfc_debug(2, "Has to free instance\n");
-			s5p_mfc_close_mfc_inst(dev, ctx);
-		}
-		/* hardware locking scheme */
-		if (dev->curr_ctx == ctx->num)
-			clear_bit(0, &dev->hw_lock);
-		dev->num_inst--;
-		if (dev->num_inst == 0) {
-			mfc_debug(2, "Last instance\n");
-			s5p_mfc_deinit_hw(dev);
-			del_timer_sync(&dev->watchdog_timer);
-			s5p_mfc_clock_off();
-			if (s5p_mfc_power_off() < 0)
-				mfc_err("Power off failed\n");
-		} else {
-			mfc_debug(2, "Shutting down clock\n");
-			s5p_mfc_clock_off();
-		}
+	/* Mark context as idle */
+	clear_work_bit_irqsave(ctx);
+	/* If instance was initialised and not yet freed,
+	 * return instance and free resources */
+	if (ctx->state != MFCINST_FREE && ctx->state != MFCINST_INIT) {
+		mfc_debug(2, "Has to free instance\n");
+		s5p_mfc_close_mfc_inst(dev, ctx);
 	}
-	if (dev)
-		dev->ctx[ctx->num] = NULL;
+	/* hardware locking scheme */
+	if (dev->curr_ctx == ctx->num)
+		clear_bit(0, &dev->hw_lock);
+	dev->num_inst--;
+	if (dev->num_inst == 0) {
+		mfc_debug(2, "Last instance\n");
+		s5p_mfc_deinit_hw(dev);
+		del_timer_sync(&dev->watchdog_timer);
+		s5p_mfc_clock_off();
+		if (s5p_mfc_power_off() < 0)
+			mfc_err("Power off failed\n");
+	} else {
+		mfc_debug(2, "Shutting down clock\n");
+		s5p_mfc_clock_off();
+	}
+	dev->ctx[ctx->num] = NULL;
 	s5p_mfc_dec_ctrls_delete(ctx);
 	v4l2_fh_del(&ctx->fh);
-	/* vdev is gone if dev is null */
-	if (dev)
-		v4l2_fh_exit(&ctx->fh);
+	v4l2_fh_exit(&ctx->fh);
 	kfree(ctx);
 	mfc_debug_leave();
-	if (dev)
-		mutex_unlock(&dev->mfc_mutex);
-
+	mutex_unlock(&dev->mfc_mutex);
 	return 0;
 }
 
@@ -1409,25 +1398,8 @@ err_dma:
 static int s5p_mfc_remove(struct platform_device *pdev)
 {
 	struct s5p_mfc_dev *dev = platform_get_drvdata(pdev);
-	struct s5p_mfc_ctx *ctx;
-	int i;
 
 	v4l2_info(&dev->v4l2_dev, "Removing %s\n", pdev->name);
-
-	/*
-	 * Clear ctx dev pointer to avoid races between s5p_mfc_remove()
-	 * and s5p_mfc_release() and s5p_mfc_release() accessing ctx->dev
-	 * after s5p_mfc_remove() is run during unbind.
-	*/
-	mutex_lock(&dev->mfc_mutex);
-	for (i = 0; i < MFC_NUM_CONTEXTS; i++) {
-		ctx = dev->ctx[i];
-		if (!ctx)
-			continue;
-		/* clear ctx->dev */
-		ctx->dev = NULL;
-	}
-	mutex_unlock(&dev->mfc_mutex);
 
 	del_timer_sync(&dev->watchdog_timer);
 	flush_work(&dev->watchdog_work);
@@ -1634,6 +1606,7 @@ static struct platform_driver s5p_mfc_driver = {
 	.driver	= {
 		.name	= S5P_MFC_NAME,
 		.pm	= &s5p_mfc_pm_ops,
+		.suppress_bind_attrs = true,
 		.of_match_table = exynos_mfc_match,
 	},
 };
