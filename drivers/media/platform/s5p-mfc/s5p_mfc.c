@@ -49,7 +49,7 @@ MODULE_PARM_DESC(mem, "Preallocated memory size for the firmware and context buf
 /* Helper functions for interrupt processing */
 
 /* Wake up device wait_queue */
-static void wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
+void s5p_mfc_wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
 			unsigned int err)
 {
 	dev->int_type = reason;
@@ -114,7 +114,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 	}
 	clear_bit(0, &dev->enter_suspend);
 	__s5p_mfc_hw_unlock(dev);
-	wake_up_dev(dev, S5P_MFC_R2H_CMD_ERR_RET, 0);
+	s5p_mfc_wake_up_dev(dev, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 
 	/* De-init MFC */
@@ -263,7 +263,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		s5p_mfc_update_ctx_locked(ctx);
 
 	s5p_mfc_hw_unlock(dev);
-	wake_up_dev(dev, reason, err);
+	s5p_mfc_wake_up_dev(dev, reason, err);
 
 	spin_unlock(&dev->irqlock);
 
@@ -275,7 +275,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 
 irq_no_try_run:
 	__s5p_mfc_hw_unlock(dev);
-	wake_up_dev(dev, reason, err);
+	s5p_mfc_wake_up_dev(dev, reason, err);
 
 	spin_unlock(&dev->irqlock);
 

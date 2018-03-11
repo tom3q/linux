@@ -138,10 +138,8 @@ static int s5p_mfc_open_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 	h2r_args.arg[3] = ctx->ctx.size;
 	ret = s5p_mfc_cmd_host2risc_v5(dev, S5P_FIMV_H2R_CMD_OPEN_INSTANCE,
 								&h2r_args);
-	if (ret) {
+	if (ret)
 		mfc_err("Failed to create a new instance\n");
-		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
-	}
 	return ret;
 }
 
@@ -153,7 +151,6 @@ static int s5p_mfc_close_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 
 	if (ctx->state == MFCINST_FREE) {
 		mfc_err("Instance already returned\n");
-		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
 		return -EINVAL;
 	}
 	/* Closing decoding instance  */
@@ -162,12 +159,9 @@ static int s5p_mfc_close_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 	h2r_args.arg[0] = ctx->inst_no;
 	ret = s5p_mfc_cmd_host2risc_v5(dev, S5P_FIMV_H2R_CMD_CLOSE_INSTANCE,
 								&h2r_args);
-	if (ret) {
+	if (ret)
 		mfc_err("Failed to return an instance\n");
-		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
-		return -EINVAL;
-	}
-	return 0;
+	return ret;
 }
 
 /* Allocate temporary buffers for decoding */

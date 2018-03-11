@@ -307,10 +307,8 @@ static int s5p_mfc_run_init_dec_buffers(struct s5p_mfc_ctx *ctx)
 			0, temp_vb->b->vb2_buf.planes[0].bytesused);
 
 	ret = s5p_mfc_hw_call(dev->mfc_ops, set_dec_frame_buffer, ctx);
-	if (ret) {
+	if (ret)
 		mfc_err("Failed to alloc frame mem.\n");
-		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
-	}
 	return ret;
 }
 
@@ -412,7 +410,7 @@ static int s5p_mfc_get_new_ctx(struct s5p_mfc_dev *dev)
 }
 
 /* Try running an operation on hardware */
-void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
+static int s5p_mfc_try_run_once(struct s5p_mfc_dev *dev)
 {
 	struct s5p_mfc_ctx *ctx;
 	int new_ctx;
@@ -422,14 +420,14 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 
 	if (test_bit(0, &dev->enter_suspend)) {
 		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
-		return;
+		return 0;
 	}
 
 	/* Check whether hardware is not running */
 	if (s5p_mfc_hw_trylock(dev) < 0) {
 		/* This is perfectly ok, the scheduled ctx should wait */
 		mfc_debug(1, "Couldn't lock HW.\n");
-		return;
+		return 0;
 	}
 
 	/* Choose the context to run */
@@ -438,7 +436,7 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 		/* No contexts to run */
 		s5p_mfc_hw_unlock(dev);
 		mfc_debug(1, "No ctx is scheduled to be run.\n");
-		return;
+		return 0;
 	}
 	dev->curr_ctx = new_ctx;
 
@@ -459,6 +457,8 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 
 	ret = s5p_mfc_run_ctx(dev, ctx);
 	if (ret) {
+		unsigned long flags;
+
 		/* Cancel the watchdog. */
 		cancel_delayed_work(&dev->watchdog_work);
 
@@ -468,9 +468,33 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 		 * will ever come from hardware. */
 		s5p_mfc_clock_off();
 
+		/*
+		 * Clean up the context and make sure it won't be scheduled
+		 * anymore.
+		 */
+		spin_lock_irqsave(&dev->irqlock, flags);
+		s5p_mfc_ctx_fatal_error_locked(ctx);
+		s5p_mfc_update_ctx_locked(ctx);
+		spin_unlock_irqrestore(&dev->irqlock, flags);
+
 		/* Free hardware lock */
 		s5p_mfc_hw_unlock(dev);
+
+		/* Wake up anyone waiting for the context. */
+		s5p_mfc_wake_up_dev(dev, 0, 0);
 	}
+
+	return ret;
+}
+
+void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
+{
+	int ret;
+
+	do {
+		/* If one context fails, retry with another */
+		ret = s5p_mfc_try_run_once(dev);
+	} while (ret);
 }
 
 void s5p_mfc_update_ctx_locked(struct s5p_mfc_ctx *ctx)

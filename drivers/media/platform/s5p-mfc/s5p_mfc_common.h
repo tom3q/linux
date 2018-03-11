@@ -689,6 +689,8 @@ struct mfc_control {
 
 void s5p_mfc_cleanup_queue(struct list_head *lh, struct vb2_queue *vq);
 void s5p_mfc_ctx_fatal_error_locked(struct s5p_mfc_ctx *ctx);
+void s5p_mfc_wake_up_dev(struct s5p_mfc_dev *dev, unsigned int reason,
+			 unsigned int error);
 
 static inline void s5p_mfc_ctx_state_set(struct s5p_mfc_ctx *ctx,
 					 enum s5p_mfc_inst_state state)
