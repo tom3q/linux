@@ -71,6 +71,18 @@ void s5p_mfc_cleanup_queue(struct list_head *lh, struct vb2_queue *vq)
 	}
 }
 
+void s5p_mfc_ctx_fatal_error_locked(struct s5p_mfc_ctx *ctx)
+{
+	/* Mark all dst buffers as having an error */
+	s5p_mfc_cleanup_queue(&ctx->dst_queue, &ctx->vq_dst);
+	ctx->dst_queue_cnt = 0;
+	/* Mark all src buffers as having an error */
+	s5p_mfc_cleanup_queue(&ctx->src_queue, &ctx->vq_src);
+	ctx->src_queue_cnt = 0;
+
+	ctx->state = MFCINST_ERROR;
+}
+
 static void s5p_mfc_watchdog_worker(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
@@ -97,9 +109,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		ctx = dev->ctx[i];
 		if (!ctx)
 			continue;
-		ctx->state = MFCINST_ERROR;
-		s5p_mfc_cleanup_queue(&ctx->dst_queue, &ctx->vq_dst);
-		s5p_mfc_cleanup_queue(&ctx->src_queue, &ctx->vq_src);
+		s5p_mfc_ctx_fatal_error_locked(ctx);
 		s5p_mfc_update_ctx_locked(ctx);
 	}
 	clear_bit(0, &dev->enter_suspend);
@@ -132,11 +142,9 @@ static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
 		struct s5p_mfc_ctx *ctx, unsigned int reason, unsigned int err)
 {
 	if (ctx) {
-		int dec_err;
+		if (ctx->state == MFCINST_RUNNING) {
+			int dec_err;
 
-		/* Error recovery is dependent on the state of context */
-		switch (ctx->state) {
-		case MFCINST_RUNNING:
 			dec_err = s5p_mfc_hw_call(dev->mfc_ops, err_dec, err);
 			if (dec_err >= dev->warn_start ||
 			    err == S5P_FIMV_ERR_NO_VALID_SEQ_HDR ||
@@ -145,21 +153,9 @@ static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
 				ctx->c_ops->post_frame_start(ctx, err);
 				return;
 			}
-			/* Intentional fall-through. */
-		case MFCINST_RES_CHANGE_INIT:
-		case MFCINST_RES_CHANGE_FLUSH:
-		case MFCINST_RES_CHANGE_END:
-		case MFCINST_FINISHING:
-		case MFCINST_FINISHED:
-			/* Mark all dst buffers as having an error */
-			s5p_mfc_cleanup_queue(&ctx->dst_queue, &ctx->vq_dst);
-			/* Mark all src buffers as having an error */
-			s5p_mfc_cleanup_queue(&ctx->src_queue, &ctx->vq_src);
-		default:
-			break;
 		}
 
-		ctx->state = MFCINST_ERROR;
+		s5p_mfc_ctx_fatal_error_locked(ctx);
 	}
 
 	mfc_err("Interrupt Error: %08x\n", err);

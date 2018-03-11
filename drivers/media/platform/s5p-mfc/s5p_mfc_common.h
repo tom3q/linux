@@ -687,6 +687,7 @@ struct mfc_control {
 	container_of((__ctrl)->handler, struct s5p_mfc_ctx, ctrl_handler)
 
 void s5p_mfc_cleanup_queue(struct list_head *lh, struct vb2_queue *vq);
+void s5p_mfc_ctx_fatal_error_locked(struct s5p_mfc_ctx *ctx);
 
 #define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \
 				(dev->variant->port_num ? 1 : 0) : 0) : 0)
