@@ -817,13 +817,13 @@ static void enc_post_seq_start(struct s5p_mfc_ctx *ctx)
 	}
 
 	if (!IS_MFCV6_PLUS(dev)) {
-		ctx->state = MFCINST_RUNNING;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_RUNNING);
 	} else {
 		enc_pb_count = s5p_mfc_hw_call(dev->mfc_ops,
 				get_enc_dpb_count, dev);
 		if (ctx->pb_count < enc_pb_count)
 			ctx->pb_count = enc_pb_count;
-		ctx->state = MFCINST_HEAD_PRODUCED;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_HEAD_PRODUCED);
 	}
 }
 
@@ -833,7 +833,7 @@ static void s5p_mfc_handle_stream_complete(struct s5p_mfc_ctx *ctx)
 
 	mfc_debug(2, "Stream completed\n");
 
-	ctx->state = MFCINST_FINISHED;
+	s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHED);
 
 	if (!list_empty(&ctx->dst_queue)) {
 		mb_entry = list_entry(ctx->dst_queue.next, struct s5p_mfc_buf,
@@ -1087,7 +1087,7 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		/* dst_fmt is validated by call to vidioc_try_fmt */
 		ctx->dst_fmt = find_format(f, MFC_FMT_ENC);
-		ctx->state = MFCINST_INIT;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_INIT);
 		ctx->codec_mode = ctx->dst_fmt->codec_mode;
 		ctx->enc_dst_buf_size =	pix_fmt_mp->plane_fmt[0].sizeimage;
 		pix_fmt_mp->plane_fmt[0].bytesperline = 0;
@@ -1733,7 +1733,7 @@ static int vidioc_encoder_cmd(struct file *file, void *priv,
 		spin_lock_irqsave(&dev->irqlock, flags);
 		if (list_empty(&ctx->src_queue)) {
 			mfc_debug(2, "EOS: empty src queue, entering finishing state\n");
-			ctx->state = MFCINST_FINISHING;
+			s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHING);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
 			s5p_mfc_try_ctx(ctx);
 		} else {
@@ -1741,7 +1741,7 @@ static int vidioc_encoder_cmd(struct file *file, void *priv,
 			buf = list_entry(ctx->src_queue.prev,
 						struct s5p_mfc_buf, list);
 			if (buf->flags & MFC_BUF_FLAG_USED)
-				ctx->state = MFCINST_FINISHING;
+				s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHING);
 			else
 				buf->flags |= MFC_BUF_FLAG_EOS;
 			spin_unlock_irqrestore(&dev->irqlock, flags);
@@ -1974,12 +1974,12 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->state == MFCINST_RUNNING) &&
 		dev->curr_ctx == ctx->num &&
 		s5p_mfc_hw_is_locked(dev)) {
-		ctx->state = MFCINST_ABORT;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_ABORT);
 		if (s5p_mfc_wait_for_done_ctx(ctx))
 			mfc_err("Waiting for context %d timed out\n",
 				ctx->num);
 	}
-	ctx->state = MFCINST_FINISHED;
+	s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHED);
 	spin_lock_irqsave(&dev->irqlock, flags);
 	if (q->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
 		s5p_mfc_cleanup_queue(&ctx->dst_queue, &ctx->vq_dst);

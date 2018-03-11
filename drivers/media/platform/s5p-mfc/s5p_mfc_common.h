@@ -24,6 +24,7 @@
 #include <media/videobuf2-v4l2.h>
 #include "regs-mfc.h"
 #include "regs-mfc-v8.h"
+#include "s5p_mfc_debug.h"
 
 #define S5P_MFC_NAME		"s5p-mfc"
 
@@ -688,6 +689,14 @@ struct mfc_control {
 
 void s5p_mfc_cleanup_queue(struct list_head *lh, struct vb2_queue *vq);
 void s5p_mfc_ctx_fatal_error_locked(struct s5p_mfc_ctx *ctx);
+
+static inline void s5p_mfc_ctx_state_set(struct s5p_mfc_ctx *ctx,
+					 enum s5p_mfc_inst_state state)
+{
+	mfc_debug(4, "[ctx %02d] state %d -> %d\n",
+		  ctx->num, ctx->state, state);
+	ctx->state = state;
+}
 
 #define HAS_PORTNUM(dev)	(dev ? (dev->variant ? \
 				(dev->variant->port_num ? 1 : 0) : 0) : 0)

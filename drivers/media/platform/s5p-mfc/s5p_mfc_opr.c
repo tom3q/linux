@@ -183,7 +183,7 @@ int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx,
 	if (temp_vb->b->vb2_buf.planes[0].bytesused == 0) {
 		last_frame = MFC_DEC_LAST_FRAME;
 		mfc_debug(2, "Setting ctx->state to FINISHING\n");
-		ctx->state = MFCINST_FINISHING;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHING);
 	}
 
 	s5p_mfc_hw_call(dev->mfc_ops, decode_one_frame, ctx, last_frame);
@@ -218,7 +218,7 @@ static int s5p_mfc_run_enc_frame(struct s5p_mfc_ctx *ctx)
 		if (src_mb->b->vb2_buf.planes[0].bytesused == 0) {
 			/* send null frame */
 			s5p_mfc_hw_call(dev->mfc_ops, set_enc_null_frame, ctx);
-			ctx->state = MFCINST_FINISHING;
+			s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHING);
 		} else {
 			src_y_addr = vb2_dma_contig_plane_dma_addr(
 					&src_mb->b->vb2_buf, 0);
@@ -231,7 +231,7 @@ static int s5p_mfc_run_enc_frame(struct s5p_mfc_ctx *ctx)
 			s5p_mfc_hw_call(dev->mfc_ops, set_enc_frame_buffer, ctx,
 					src_y_addr, src_c_addr);
 			if (src_mb->flags & MFC_BUF_FLAG_EOS)
-				ctx->state = MFCINST_FINISHING;
+				s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHING);
 		}
 	}
 
@@ -309,7 +309,7 @@ static int s5p_mfc_run_init_dec_buffers(struct s5p_mfc_ctx *ctx)
 	ret = s5p_mfc_hw_call(dev->mfc_ops, set_dec_frame_buffer, ctx);
 	if (ret) {
 		mfc_err("Failed to alloc frame mem.\n");
-		ctx->state = MFCINST_ERROR;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
 	}
 	return ret;
 }

@@ -80,7 +80,7 @@ void s5p_mfc_ctx_fatal_error_locked(struct s5p_mfc_ctx *ctx)
 	s5p_mfc_cleanup_queue(&ctx->src_queue, &ctx->vq_src);
 	ctx->src_queue_cnt = 0;
 
-	ctx->state = MFCINST_ERROR;
+	s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
 }
 
 static void s5p_mfc_watchdog_worker(struct work_struct *work)
@@ -174,7 +174,7 @@ static void s5p_mfc_handle_init_buffers(struct s5p_mfc_ctx *ctx, unsigned int er
 	if (err)
 		return;
 
-	ctx->state = MFCINST_RUNNING;
+	s5p_mfc_ctx_state_set(ctx, MFCINST_RUNNING);
 	if (!ctx->dpb_flush_flag && ctx->head_processed) {
 		if (!list_empty(&ctx->src_queue)) {
 			src_buf = list_entry(ctx->src_queue.next,
@@ -227,12 +227,12 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 
 	case S5P_MFC_R2H_CMD_OPEN_INSTANCE_RET:
 		ctx->inst_no = s5p_mfc_hw_call(dev->mfc_ops, get_inst_no, dev);
-		ctx->state = MFCINST_GOT_INST;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_GOT_INST);
 		break;
 
 	case S5P_MFC_R2H_CMD_CLOSE_INSTANCE_RET:
 		ctx->inst_no = MFC_NO_INSTANCE_SET;
-		ctx->state = MFCINST_FREE;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_FREE);
 		break;
 
 	case S5P_MFC_R2H_CMD_SYS_INIT_RET:
@@ -250,7 +250,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		break;
 
 	case S5P_MFC_R2H_CMD_DPB_FLUSH_RET:
-		ctx->state = MFCINST_RUNNING;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_RUNNING);
 		break;
 
 	default:

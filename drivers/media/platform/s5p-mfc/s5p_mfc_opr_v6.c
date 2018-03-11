@@ -1621,7 +1621,7 @@ static int s5p_mfc_run_init_enc_buffers_v6(struct s5p_mfc_ctx *ctx)
 	ret = s5p_mfc_set_enc_ref_buffer_v6(ctx);
 	if (ret) {
 		mfc_err("Failed to alloc frame mem.\n");
-		ctx->state = MFCINST_ERROR;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
 	}
 	return ret;
 }

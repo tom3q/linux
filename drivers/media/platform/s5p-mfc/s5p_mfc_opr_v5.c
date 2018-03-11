@@ -140,7 +140,7 @@ static int s5p_mfc_open_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 								&h2r_args);
 	if (ret) {
 		mfc_err("Failed to create a new instance\n");
-		ctx->state = MFCINST_ERROR;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
 	}
 	return ret;
 }
@@ -153,7 +153,7 @@ static int s5p_mfc_close_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 
 	if (ctx->state == MFCINST_FREE) {
 		mfc_err("Instance already returned\n");
-		ctx->state = MFCINST_ERROR;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
 		return -EINVAL;
 	}
 	/* Closing decoding instance  */
@@ -164,7 +164,7 @@ static int s5p_mfc_close_inst_cmd_v5(struct s5p_mfc_ctx *ctx)
 								&h2r_args);
 	if (ret) {
 		mfc_err("Failed to return an instance\n");
-		ctx->state = MFCINST_ERROR;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
 		return -EINVAL;
 	}
 	return 0;

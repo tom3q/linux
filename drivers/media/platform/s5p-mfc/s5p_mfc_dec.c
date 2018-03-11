@@ -320,9 +320,9 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 	ctx->mv_count = s5p_mfc_hw_call(dev->mfc_ops, get_mv_count,
 			dev);
 	if (ctx->img_width == 0 || ctx->img_height == 0)
-		ctx->state = MFCINST_ERROR;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
 	else
-		ctx->state = MFCINST_HEAD_PARSED;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_HEAD_PARSED);
 
 	if ((ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
 		ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC) &&
@@ -346,7 +346,7 @@ static void s5p_mfc_handle_frame_all_extracted(struct s5p_mfc_ctx *ctx)
 	struct s5p_mfc_buf *dst_buf;
 	struct s5p_mfc_dev *dev = ctx->dev;
 
-	ctx->state = MFCINST_FINISHED;
+	s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHED);
 	ctx->sequence++;
 	while (!list_empty(&ctx->dst_queue)) {
 		dst_buf = list_entry(ctx->dst_queue.next,
@@ -497,10 +497,10 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int err)
 				>> S5P_FIMV_DEC_STATUS_RESOLUTION_SHIFT;
 	mfc_debug(2, "Frame Status: %x\n", dst_frame_status);
 	if (ctx->state == MFCINST_RES_CHANGE_INIT)
-		ctx->state = MFCINST_RES_CHANGE_FLUSH;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_RES_CHANGE_FLUSH);
 	if (res_change == S5P_FIMV_RES_INCREASE ||
 		res_change == S5P_FIMV_RES_DECREASE) {
-		ctx->state = MFCINST_RES_CHANGE_INIT;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_RES_CHANGE_INIT);
 		return;
 	}
 	if (ctx->dpb_flush_flag)
@@ -516,7 +516,7 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int err)
 			};
 
 			s5p_mfc_handle_frame_all_extracted(ctx);
-			ctx->state = MFCINST_RES_CHANGE_END;
+			s5p_mfc_ctx_state_set(ctx, MFCINST_RES_CHANGE_END);
 			v4l2_event_queue_fh(&ctx->fh, &ev_src_ch);
 
 			return;
@@ -553,7 +553,7 @@ static void s5p_mfc_handle_frame(struct s5p_mfc_ctx *ctx, unsigned int err)
 			mfc_debug(2, "MFC needs next buffer\n");
 			ctx->consumed_stream = 0;
 			if (src_buf->flags & MFC_BUF_FLAG_EOS)
-				ctx->state = MFCINST_FINISHING;
+				s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHING);
 			list_del(&src_buf->list);
 			ctx->src_queue_cnt--;
 			if (s5p_mfc_hw_call(dev->mfc_ops, err_dec, err) > 0)
@@ -766,7 +766,7 @@ static int vidioc_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 		else
 			ctx->dec_src_buf_size = pix_mp->plane_fmt[0].sizeimage;
 		pix_mp->plane_fmt[0].bytesperline = 0;
-		ctx->state = MFCINST_INIT;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_INIT);
 		ret = 0;
 		goto out;
 	} else {
@@ -1121,7 +1121,7 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 		spin_lock_irqsave(&dev->irqlock, flags);
 		if (list_empty(&ctx->src_queue)) {
 			mfc_err("EOS: empty src queue, entering finishing state");
-			ctx->state = MFCINST_FINISHING;
+			s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHING);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
 			s5p_mfc_try_ctx(ctx);
 		} else {
@@ -1129,7 +1129,7 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 			buf = list_entry(ctx->src_queue.prev,
 						struct s5p_mfc_buf, list);
 			if (buf->flags & MFC_BUF_FLAG_USED)
-				ctx->state = MFCINST_FINISHING;
+				s5p_mfc_ctx_state_set(ctx, MFCINST_FINISHING);
 			else
 				buf->flags |= MFC_BUF_FLAG_EOS;
 			spin_unlock_irqrestore(&dev->irqlock, flags);
@@ -1297,7 +1297,7 @@ static int s5p_mfc_start_streaming(struct vb2_queue *q, unsigned int count)
 	v4l2_ctrl_handler_setup(&ctx->ctrl_handler);
 	if (ctx->state == MFCINST_FINISHING ||
 		ctx->state == MFCINST_FINISHED)
-		ctx->state = MFCINST_RUNNING;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_RUNNING);
 	s5p_mfc_try_ctx(ctx);
 	return 0;
 }
@@ -1313,7 +1313,7 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 	if ((ctx->state == MFCINST_FINISHING ||
 		ctx->state ==  MFCINST_RUNNING) &&
 		dev->curr_ctx == ctx->num && s5p_mfc_hw_is_locked(dev)) {
-		ctx->state = MFCINST_ABORT;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_ABORT);
 		spin_unlock_irqrestore(&dev->irqlock, flags);
 		if (s5p_mfc_wait_for_done_ctx(ctx))
 			mfc_err("Waiting for context %d timed out\n",
@@ -1329,7 +1329,7 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->dpb_flush_flag = 1;
 		ctx->dec_dst_flag = 0;
 		if (IS_MFCV6_PLUS(dev) && (ctx->state == MFCINST_RUNNING)) {
-			ctx->state = MFCINST_FLUSH;
+			s5p_mfc_ctx_state_set(ctx, MFCINST_FLUSH);
 			s5p_mfc_try_ctx(ctx);
 			spin_unlock_irqrestore(&dev->irqlock, flags);
 			if (s5p_mfc_wait_for_done_ctx(ctx))
@@ -1342,7 +1342,7 @@ static void s5p_mfc_stop_streaming(struct vb2_queue *q)
 		ctx->src_queue_cnt = 0;
 	}
 	if (aborted)
-		ctx->state = MFCINST_RUNNING;
+		s5p_mfc_ctx_state_set(ctx, MFCINST_RUNNING);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
 }
 
