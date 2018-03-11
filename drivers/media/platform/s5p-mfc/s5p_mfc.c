@@ -488,8 +488,6 @@ static void s5p_mfc_handle_error(struct s5p_mfc_dev *dev,
 	s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 	s5p_mfc_clock_off();
 	wake_up_dev(dev, reason, err);
-
-	clear_bit(0, &dev->enter_suspend);
 }
 
 /* Header parsing interrupt handling */
@@ -684,7 +682,6 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 			clear_work_bit(ctx);
 		s5p_mfc_hw_call(dev->mfc_ops, clear_int_flags, dev);
 		__s5p_mfc_hw_unlock(dev);
-		clear_bit(0, &dev->enter_suspend);
 		wake_up_dev(dev, reason, err);
 		break;
 
@@ -1398,29 +1395,32 @@ static int s5p_mfc_suspend(struct device *dev)
 	if (m_dev->num_inst == 0)
 		return 0;
 
-	if (test_and_set_bit(0, &m_dev->enter_suspend) != 0) {
-		mfc_err("Error: going to suspend for a second time\n");
-		return -EIO;
-	}
+	set_bit(0, &m_dev->enter_suspend);
 
 	/* Check if we're processing then wait if it necessary. */
-	while (s5p_mfc_hw_trylock(m_dev) < 0) {
-		/* Try and lock the HW */
-		/* Wait on the interrupt waitqueue */
-		ret = wait_event_interruptible_timeout(m_dev->queue,
-			m_dev->int_cond, msecs_to_jiffies(MFC_INT_TIMEOUT));
-		if (ret == 0) {
+	ret = wait_event_interruptible_timeout(m_dev->queue,
+					!s5p_mfc_hw_trylock(m_dev),
+					msecs_to_jiffies(MFC_INT_TIMEOUT));
+	if (ret <= 0) {
+		if (!ret) {
 			mfc_err("Waiting for hardware to finish timed out\n");
-			clear_bit(0, &m_dev->enter_suspend);
-			return -EIO;
+			ret = -EIO;
 		}
+		goto err_clear_suspend;
 	}
 
+	s5p_mfc_hw_unlock(m_dev);
+
 	ret = s5p_mfc_sleep(m_dev);
-	if (ret) {
-		clear_bit(0, &m_dev->enter_suspend);
-		__s5p_mfc_hw_unlock(m_dev);
-	}
+	if (ret)
+		goto err_unlock;
+
+	return 0;
+
+err_unlock:
+	__s5p_mfc_hw_unlock(m_dev);
+err_clear_suspend:
+	clear_bit(0, &m_dev->enter_suspend);
 	return ret;
 }
 
@@ -1428,10 +1428,17 @@ static int s5p_mfc_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct s5p_mfc_dev *m_dev = platform_get_drvdata(pdev);
+	int ret;
 
 	if (m_dev->num_inst == 0)
 		return 0;
-	return s5p_mfc_wakeup(m_dev);
+
+	ret = s5p_mfc_wakeup(m_dev);
+	if (ret)
+		return ret;
+
+	s5p_mfc_try_run(m_dev);
+	return 0;
 }
 #endif
 
