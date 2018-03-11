@@ -60,7 +60,7 @@ int s5p_mfc_wait_for_done_ctx(struct s5p_mfc_ctx *ctx)
 	/* Timeouts handled by watchdog. */
 	wait_event(dev->queue, test_bit(ctx->num, &dev->ctx_work_bits));
 
-	if (ctx->state == MFCINST_ERROR)
+	if (s5p_mfc_ctx_has_error(ctx))
 		return -EIO;
 
 	return 0;

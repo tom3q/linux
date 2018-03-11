@@ -230,7 +230,6 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 	case MFCINST_FREE:
 	/* Context is stopped. */
 	case MFCINST_FINISHED:
-	case MFCINST_ERROR:
 	case MFCINST_ABORT:
 		ready = false;
 		break;
@@ -319,10 +318,13 @@ static void s5p_mfc_handle_seq_done(struct s5p_mfc_ctx *ctx)
 			dev);
 	ctx->mv_count = s5p_mfc_hw_call(dev->mfc_ops, get_mv_count,
 			dev);
-	if (ctx->img_width == 0 || ctx->img_height == 0)
-		s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
-	else
-		s5p_mfc_ctx_state_set(ctx, MFCINST_HEAD_PARSED);
+
+	if (ctx->img_width == 0 || ctx->img_height == 0) {
+		s5p_mfc_ctx_fatal_error_locked(ctx);
+		return;
+	}
+
+	s5p_mfc_ctx_state_set(ctx, MFCINST_HEAD_PARSED);
 
 	if ((ctx->codec_mode == S5P_MFC_CODEC_H264_DEC ||
 		ctx->codec_mode == S5P_MFC_CODEC_H264_MVC_DEC) &&
@@ -932,7 +934,7 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 
-	if (ctx->state == MFCINST_ERROR) {
+	if (s5p_mfc_ctx_has_error(ctx)) {
 		mfc_err("Call on QBUF after unrecoverable error\n");
 		return -EIO;
 	}
@@ -952,7 +954,7 @@ static int vidioc_dqbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 	int ret;
 
-	if (ctx->state == MFCINST_ERROR) {
+	if (s5p_mfc_ctx_has_error(ctx)) {
 		mfc_err_limited("Call on DQBUF after unrecoverable error\n");
 		return -EIO;
 	}

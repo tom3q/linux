@@ -80,7 +80,7 @@ void s5p_mfc_ctx_fatal_error_locked(struct s5p_mfc_ctx *ctx)
 	s5p_mfc_cleanup_queue(&ctx->src_queue, &ctx->vq_src);
 	ctx->src_queue_cnt = 0;
 
-	s5p_mfc_ctx_state_set(ctx, MFCINST_ERROR);
+	s5p_mfc_ctx_set_error(ctx);
 }
 
 static void s5p_mfc_watchdog_worker(struct work_struct *work)

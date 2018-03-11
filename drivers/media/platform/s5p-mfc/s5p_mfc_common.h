@@ -133,7 +133,6 @@ enum s5p_mfc_inst_state {
 	MFCINST_FINISHING,
 	MFCINST_FINISHED,
 	MFCINST_RETURN_INST,
-	MFCINST_ERROR,
 	MFCINST_ABORT,
 	MFCINST_FLUSH,
 	MFCINST_RES_CHANGE_INIT,
@@ -491,6 +490,7 @@ struct s5p_mfc_codec_ops {
  * @type:		type of the instance - decoder or encoder
  * @state:		state of the context
  * @inst_no:		number of hw instance associated with the context
+ * @flags:		Flags affecting context regardless of state
  * @img_width:		width of the image that is decoded or encoded
  * @img_height:		height of the image that is decoded or encoded
  * @buf_width:		width of the buffer for processed image
@@ -569,6 +569,7 @@ struct s5p_mfc_ctx {
 	enum s5p_mfc_inst_type type;
 	enum s5p_mfc_inst_state state;
 	int inst_no;
+	unsigned long flags;
 
 	/* Image parameters */
 	int img_width;
@@ -647,6 +648,26 @@ struct s5p_mfc_ctx {
 	unsigned int frame_tag;
 	size_t scratch_buf_size;
 };
+
+/*
+ * enum s5p_mfc_ctx_flags - Flags affecting context regardless of its state.
+ *
+ * @S5P_MFC_CTX_ERROR:	Unrecoverable error occurred and context needs to be
+ *			released.
+ */
+enum s5p_mfc_ctx_flags {
+	S5P_MFC_CTX_ERROR,
+};
+
+static inline void s5p_mfc_ctx_set_error(struct s5p_mfc_ctx *ctx)
+{
+	set_bit(S5P_MFC_CTX_ERROR, &ctx->flags);
+}
+
+static inline bool s5p_mfc_ctx_has_error(struct s5p_mfc_ctx *ctx)
+{
+	return test_bit(S5P_MFC_CTX_ERROR, &ctx->flags);
+}
 
 /*
  * struct s5p_mfc_fmt -	structure used to store information about pixelformats

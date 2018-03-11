@@ -741,7 +741,6 @@ static bool s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
 	case MFCINST_FREE:
 	/* Context is stopped. */
 	case MFCINST_FINISHED:
-	case MFCINST_ERROR:
 	case MFCINST_ABORT:
 		ready = false;
 		break;
@@ -1240,7 +1239,7 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 
-	if (ctx->state == MFCINST_ERROR) {
+	if (s5p_mfc_ctx_has_error(ctx)) {
 		mfc_err("Call on QBUF after unrecoverable error\n");
 		return -EIO;
 	}
@@ -1265,7 +1264,7 @@ static int vidioc_dqbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(priv);
 	int ret;
 
-	if (ctx->state == MFCINST_ERROR) {
+	if (s5p_mfc_ctx_has_error(ctx)) {
 		mfc_err_limited("Call on DQBUF after unrecoverable error\n");
 		return -EIO;
 	}
@@ -2003,7 +2002,7 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 	unsigned long flags;
 	struct s5p_mfc_buf *mfc_buf;
 
-	if (ctx->state == MFCINST_ERROR) {
+	if (s5p_mfc_ctx_has_error(ctx)) {
 		vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
 		cleanup_ref_queue(ctx);
 		return;

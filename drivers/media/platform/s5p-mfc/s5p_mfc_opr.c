@@ -503,7 +503,8 @@ void s5p_mfc_update_ctx_locked(struct s5p_mfc_ctx *ctx)
 
 	assert_spin_locked(&dev->irqlock);
 
-	if (s5p_mfc_hw_call(ctx->c_ops, ctx_ready, ctx))
+	if (s5p_mfc_hw_call(ctx->c_ops, ctx_ready, ctx) &&
+	    !s5p_mfc_ctx_has_error(ctx))
 		set_bit(ctx->num, &dev->ctx_work_bits);
 	else
 		clear_bit(ctx->num, &dev->ctx_work_bits);
