@@ -224,8 +224,9 @@ int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 	ret = s5p_mfc_reset(dev);
 	if (ret) {
 		mfc_err("Failed to reset MFC - timeout\n");
-		return ret;
+		goto err_clk_off;
 	}
+
 	mfc_debug(2, "Done MFC reset..\n");
 	/* 1. Set DRAM base Addr */
 	s5p_mfc_init_memctrl(dev);
@@ -242,11 +243,10 @@ int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 	else
 		mfc_write(dev, 0x3ff, S5P_FIMV_SW_RESET);
 	mfc_debug(2, "Will now wait for completion of firmware transfer\n");
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_FW_STATUS_RET)) {
+	ret = s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_FW_STATUS_RET);
+	if (ret) {
 		mfc_err("Failed to load firmware\n");
-		s5p_mfc_reset(dev);
-		s5p_mfc_clock_off();
-		return -EIO;
+		goto err_reset;
 	}
 
 	WARN_ON(s5p_mfc_hw_trylock(dev) < 0);
@@ -255,26 +255,17 @@ int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, sys_init_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFC - timeout\n");
-		s5p_mfc_reset(dev);
-		s5p_mfc_clock_off();
-		return ret;
+		goto err_reset;
 	}
+
 	mfc_debug(2, "Ok, now will wait for completion of hardware init\n");
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_SYS_INIT_RET)) {
-		mfc_err("Failed to init hardware\n");
-		s5p_mfc_reset(dev);
-		s5p_mfc_clock_off();
-		return -EIO;
-	}
-	if (dev->int_err != 0 || dev->int_type !=
-					S5P_MFC_R2H_CMD_SYS_INIT_RET) {
-		/* Failure. */
+	ret = s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_SYS_INIT_RET);
+	if (ret) {
 		mfc_err("Failed to init firmware - error: %d int: %d\n",
 						dev->int_err, dev->int_type);
-		s5p_mfc_reset(dev);
-		s5p_mfc_clock_off();
-		return -EIO;
+		goto err_reset;
 	}
+
 	if (IS_MFCV6_PLUS(dev))
 		ver = mfc_read(dev, S5P_FIMV_FW_VERSION_V6);
 	else
@@ -282,9 +273,18 @@ int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 
 	mfc_debug(2, "MFC F/W version : %02xyy, %02xmm, %02xdd\n",
 		(ver >> 16) & 0xFF, (ver >> 8) & 0xFF, ver & 0xFF);
+
 	s5p_mfc_clock_off();
 	mfc_debug_leave();
 	return 0;
+
+err_reset:
+	s5p_mfc_reset(dev);
+err_clk_off:
+	s5p_mfc_clock_off();
+	__s5p_mfc_hw_unlock(dev);
+	mfc_debug_leave();
+	return ret;
 }
 
 
@@ -311,20 +311,17 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, sleep_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFC - timeout\n");
-		return ret;
+		goto exit_clk_off;
 	}
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_SLEEP_RET)) {
-		mfc_err("Failed to sleep\n");
-		return -EIO;
-	}
+
+	ret = s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_SLEEP_RET);
+	if (ret)
+		mfc_err("Failed to sleep - ret: %d error: %d int: %d\n",
+			ret, dev->int_err, dev->int_type);
+
+exit_clk_off:
 	s5p_mfc_clock_off();
-	if (dev->int_err != 0 || dev->int_type !=
-						S5P_MFC_R2H_CMD_SLEEP_RET) {
-		/* Failure. */
-		mfc_err("Failed to sleep - error: %d int: %d\n", dev->int_err,
-								dev->int_type);
-		return -EIO;
-	}
+	__s5p_mfc_hw_unlock(dev);
 	mfc_debug_leave();
 	return ret;
 }
@@ -339,9 +336,11 @@ static int s5p_mfc_v8_wait_wakeup(struct s5p_mfc_dev *dev)
 	dev->risc_on = 1;
 	mfc_write(dev, 0x1, S5P_FIMV_RISC_ON_V6);
 
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_FW_STATUS_RET)) {
-		mfc_err("Failed to reset MFCV8\n");
-		return -EIO;
+	ret = s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_FW_STATUS_RET);
+	if (ret) {
+		mfc_err("Failed to reset MFCV8 - ret: %d error: %d int: %d\n",
+			ret, dev->int_err, dev->int_type);
+		goto exit_unlock;
 	}
 
 	WARN_ON(s5p_mfc_hw_trylock(dev) < 0);
@@ -350,13 +349,15 @@ static int s5p_mfc_v8_wait_wakeup(struct s5p_mfc_dev *dev)
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFCV8 - timeout\n");
-		return ret;
+		goto exit_unlock;
 	}
+	ret = s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_WAKEUP_RET);
+	if (ret)
+		mfc_err("Failed to wakeup MFC - ret: %d error: %d int: %d\n",
+			ret, dev->int_err, dev->int_type);
 
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_WAKEUP_RET)) {
-		mfc_err("Failed to wakeup MFC\n");
-		return -EIO;
-	}
+exit_unlock:
+	__s5p_mfc_hw_unlock(dev);
 	return ret;
 }
 
@@ -370,7 +371,7 @@ static int s5p_mfc_wait_wakeup(struct s5p_mfc_dev *dev)
 	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFC - timeout\n");
-		return ret;
+		goto exit_unlock;
 	}
 
 	/* Release reset signal to the RISC */
@@ -381,10 +382,13 @@ static int s5p_mfc_wait_wakeup(struct s5p_mfc_dev *dev)
 		mfc_write(dev, 0x3ff, S5P_FIMV_SW_RESET);
 	}
 
-	if (s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_WAKEUP_RET)) {
-		mfc_err("Failed to wakeup MFC\n");
-		return -EIO;
-	}
+	ret = s5p_mfc_wait_for_done_dev(dev, S5P_MFC_R2H_CMD_WAKEUP_RET);
+	if (ret)
+		mfc_err("Failed to wakeup MFC - ret: %d, error: %d, int: %d\n",
+			ret, dev->int_err, dev->int_type);
+
+exit_unlock:
+	__s5p_mfc_hw_unlock(dev);
 	return ret;
 }
 
@@ -400,10 +404,10 @@ int s5p_mfc_wakeup(struct s5p_mfc_dev *dev)
 	ret = s5p_mfc_reset(dev);
 	if (ret) {
 		mfc_err("Failed to reset MFC - timeout\n");
-		s5p_mfc_clock_off();
-		return ret;
+		goto exit_clk_off;
 	}
 	mfc_debug(2, "Done MFC reset..\n");
+
 	/* 1. Set DRAM base Addr */
 	s5p_mfc_init_memctrl(dev);
 	/* 2. Initialize registers of channel I/F */
@@ -414,19 +418,10 @@ int s5p_mfc_wakeup(struct s5p_mfc_dev *dev)
 	else
 		ret = s5p_mfc_wait_wakeup(dev);
 
+exit_clk_off:
 	s5p_mfc_clock_off();
-	if (ret)
-		return ret;
-
-	if (dev->int_err != 0 || dev->int_type !=
-						S5P_MFC_R2H_CMD_WAKEUP_RET) {
-		/* Failure. */
-		mfc_err("Failed to wakeup - error: %d int: %d\n", dev->int_err,
-								dev->int_type);
-		return -EIO;
-	}
 	mfc_debug_leave();
-	return 0;
+	return ret;
 }
 
 int s5p_mfc_open_mfc_inst(struct s5p_mfc_dev *dev, struct s5p_mfc_ctx *ctx)
