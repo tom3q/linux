@@ -13,7 +13,6 @@
  */
 
 #include <linux/bitops.h>
-#include "s5p_mfc_cmd.h"
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_intr.h"
 #include "s5p_mfc_opr.h"
@@ -336,11 +335,11 @@ static int s5p_mfc_run_ctx(struct s5p_mfc_dev *dev,
 			ret = s5p_mfc_run_dec_frame(ctx, MFC_DEC_FRAME);
 			break;
 		case MFCINST_INIT:
-			ret = s5p_mfc_hw_call(dev->mfc_cmds, open_inst_cmd,
+			ret = s5p_mfc_hw_call(dev->mfc_ops, open_inst_cmd,
 					ctx);
 			break;
 		case MFCINST_RETURN_INST:
-			ret = s5p_mfc_hw_call(dev->mfc_cmds, close_inst_cmd,
+			ret = s5p_mfc_hw_call(dev->mfc_ops, close_inst_cmd,
 					ctx);
 			break;
 		case MFCINST_GOT_INST:
@@ -374,11 +373,11 @@ static int s5p_mfc_run_ctx(struct s5p_mfc_dev *dev,
 			ret = s5p_mfc_run_enc_frame(ctx);
 			break;
 		case MFCINST_INIT:
-			ret = s5p_mfc_hw_call(dev->mfc_cmds, open_inst_cmd,
+			ret = s5p_mfc_hw_call(dev->mfc_ops, open_inst_cmd,
 					ctx);
 			break;
 		case MFCINST_RETURN_INST:
-			ret = s5p_mfc_hw_call(dev->mfc_cmds, close_inst_cmd,
+			ret = s5p_mfc_hw_call(dev->mfc_ops, close_inst_cmd,
 					ctx);
 			break;
 		case MFCINST_GOT_INST:

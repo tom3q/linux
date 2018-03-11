@@ -328,6 +328,13 @@ struct s5p_mfc_hw_ops {
 	void (*set_flush)(struct s5p_mfc_ctx *ctx, int flush);
 	void (*run_res_change)(struct s5p_mfc_ctx *ctx);
 	int (*run_init_enc_buffers)(struct s5p_mfc_ctx *ctx);
+
+	/* Low level initialization commands. */
+	int (*sys_init_cmd)(struct s5p_mfc_dev *dev);
+	int (*sleep_cmd)(struct s5p_mfc_dev *dev);
+	int (*wakeup_cmd)(struct s5p_mfc_dev *dev);
+	int (*open_inst_cmd)(struct s5p_mfc_ctx *ctx);
+	int (*close_inst_cmd)(struct s5p_mfc_ctx *ctx);
 };
 
 int s5p_mfc_run_dec_frame(struct s5p_mfc_ctx *ctx,

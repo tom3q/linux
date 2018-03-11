@@ -33,7 +33,6 @@
 #include "s5p_mfc_intr.h"
 #include "s5p_mfc_iommu.h"
 #include "s5p_mfc_opr.h"
-#include "s5p_mfc_cmd.h"
 #include "s5p_mfc_pm.h"
 
 #define S5P_MFC_DEC_NAME	"s5p-mfc-dec"
@@ -871,7 +870,6 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 	/* Initialize HW ops and commands based on MFC version */
 	s5p_mfc_init_hw_ops(dev);
-	s5p_mfc_init_hw_cmds(dev);
 	s5p_mfc_init_regs(dev);
 
 	/* Register decoder and encoder */

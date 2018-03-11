@@ -15,7 +15,6 @@
 #include <linux/firmware.h>
 #include <linux/jiffies.h>
 #include <linux/sched.h>
-#include "s5p_mfc_cmd.h"
 #include "s5p_mfc_common.h"
 #include "s5p_mfc_debug.h"
 #include "s5p_mfc_intr.h"
@@ -252,7 +251,7 @@ int s5p_mfc_init_hw(struct s5p_mfc_dev *dev)
 	WARN_ON(s5p_mfc_hw_trylock(dev) < 0);
 
 	/* 4. Initialize firmware */
-	ret = s5p_mfc_hw_call(dev->mfc_cmds, sys_init_cmd, dev);
+	ret = s5p_mfc_hw_call(dev->mfc_ops, sys_init_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFC - timeout\n");
 		goto err_reset;
@@ -308,7 +307,7 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 
 	WARN_ON(s5p_mfc_hw_trylock(dev) < 0);
 
-	ret = s5p_mfc_hw_call(dev->mfc_cmds, sleep_cmd, dev);
+	ret = s5p_mfc_hw_call(dev->mfc_ops, sleep_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFC - timeout\n");
 		goto exit_clk_off;
@@ -346,7 +345,7 @@ static int s5p_mfc_v8_wait_wakeup(struct s5p_mfc_dev *dev)
 	WARN_ON(s5p_mfc_hw_trylock(dev) < 0);
 
 	mfc_debug(2, "Write command to wakeup MFCV8\n");
-	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
+	ret = s5p_mfc_hw_call(dev->mfc_ops, wakeup_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFCV8 - timeout\n");
 		goto exit_unlock;
@@ -368,7 +367,7 @@ static int s5p_mfc_wait_wakeup(struct s5p_mfc_dev *dev)
 	WARN_ON(s5p_mfc_hw_trylock(dev) < 0);
 
 	/* Send MFC wakeup command */
-	ret = s5p_mfc_hw_call(dev->mfc_cmds, wakeup_cmd, dev);
+	ret = s5p_mfc_hw_call(dev->mfc_ops, wakeup_cmd, dev);
 	if (ret) {
 		mfc_err("Failed to send command to MFC - timeout\n");
 		goto exit_unlock;
