@@ -469,14 +469,14 @@ void s5p_mfc_try_run(struct s5p_mfc_dev *dev)
 		/* Cancel the watchdog. */
 		cancel_delayed_work(&dev->watchdog_work);
 
-		/* Free hardware lock */
-		s5p_mfc_hw_unlock(dev);
-
 		/* This is in deed imporant, as no operation has been
 		 * scheduled, reduce the clock count as no one will
 		 * ever do this, because no interrupt related to this try_run
 		 * will ever come from hardware. */
 		s5p_mfc_clock_off();
+
+		/* Free hardware lock */
+		s5p_mfc_hw_unlock(dev);
 	}
 }
 

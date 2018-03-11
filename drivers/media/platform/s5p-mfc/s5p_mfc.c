@@ -119,9 +119,7 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 			mfc_err("Failed to reload FW\n");
 			goto unlock;
 		}
-		s5p_mfc_clock_on();
 		ret = s5p_mfc_init_hw(dev);
-		s5p_mfc_clock_off();
 		if (ret)
 			mfc_err("Failed to reinit FW\n");
 	}
@@ -364,15 +362,11 @@ static int s5p_mfc_open(struct file *file)
 			mfc_err("power on failed\n");
 			goto err_pwr_enable;
 		}
-		s5p_mfc_clock_on();
 		ret = s5p_mfc_load_firmware(dev);
-		if (ret) {
-			s5p_mfc_clock_off();
+		if (ret)
 			goto err_load_fw;
-		}
 		/* Init the FW */
 		ret = s5p_mfc_init_hw(dev);
-		s5p_mfc_clock_off();
 		if (ret)
 			goto err_init_hw;
 	}
@@ -477,8 +471,6 @@ static int s5p_mfc_release(struct file *file)
 	mutex_lock(&dev->mfc_mutex);
 	vb2_queue_release(&ctx->vq_src);
 	vb2_queue_release(&ctx->vq_dst);
-	s5p_mfc_clock_on();
-
 	/* If instance was initialised and not yet freed,
 	 * return instance and free resources */
 	if (ctx->state != MFCINST_FREE && ctx->state != MFCINST_INIT) {
@@ -492,12 +484,8 @@ static int s5p_mfc_release(struct file *file)
 	if (dev->num_inst == 0) {
 		mfc_debug(2, "Last instance\n");
 		s5p_mfc_deinit_hw(dev);
-		s5p_mfc_clock_off();
 		if (s5p_mfc_power_off() < 0)
 			mfc_err("Power off failed\n");
-	} else {
-		mfc_debug(2, "Shutting down clock\n");
-		s5p_mfc_clock_off();
 	}
 	dev->ctx[ctx->num] = NULL;
 	s5p_mfc_dec_ctrls_delete(ctx);
