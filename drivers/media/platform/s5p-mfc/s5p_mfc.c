@@ -112,7 +112,8 @@ static void s5p_mfc_watchdog_worker(struct work_struct *work)
 		s5p_mfc_ctx_fatal_error_locked(ctx);
 		s5p_mfc_update_ctx_locked(ctx);
 	}
-	clear_bit(0, &dev->enter_suspend);
+	s5p_mfc_clear_suspended(dev);
+
 	__s5p_mfc_hw_unlock(dev);
 	s5p_mfc_wake_up_dev(dev, S5P_MFC_R2H_CMD_ERR_RET, 0);
 	spin_unlock_irqrestore(&dev->irqlock, flags);
@@ -822,7 +823,7 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 
 	mutex_init(&dev->mfc_mutex);
 	init_waitqueue_head(&dev->queue);
-	dev->hw_lock = 0;
+	dev->flags = 0;
 	INIT_DELAYED_WORK(&dev->watchdog_work, s5p_mfc_watchdog_worker);
 
 	ret = v4l2_device_register(&pdev->dev, &dev->v4l2_dev);
@@ -938,7 +939,7 @@ static int s5p_mfc_suspend(struct device *dev)
 	if (m_dev->num_inst == 0)
 		return 0;
 
-	set_bit(0, &m_dev->enter_suspend);
+	s5p_mfc_set_suspended(m_dev);
 
 	/* Check if we're processing then wait if it necessary. */
 	ret = wait_event_interruptible(m_dev->queue,
@@ -947,7 +948,7 @@ static int s5p_mfc_suspend(struct device *dev)
 		/* Interrupted. */
 		goto err_clear_suspend;
 	}
-	if (!test_bit(0, &m_dev->enter_suspend)) {
+	if (!s5p_mfc_is_suspended(m_dev)) {
 		/* Watchdog wake up. Abort. */
 		mfc_err("Watchdog wake up. Aborting suspend.\n");
 		goto err_unlock;
@@ -964,7 +965,7 @@ static int s5p_mfc_suspend(struct device *dev)
 err_unlock:
 	__s5p_mfc_hw_unlock(m_dev);
 err_clear_suspend:
-	clear_bit(0, &m_dev->enter_suspend);
+	s5p_mfc_clear_suspended(m_dev);
 	return ret;
 }
 

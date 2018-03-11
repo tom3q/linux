@@ -272,12 +272,10 @@ struct s5p_mfc_priv_buf {
  * @fw_size:		size of firmware
  * @fw_virt_addr:	virtual firmware address
  * @dma_base[]:		address of the beginning of memory banks
- * @hw_lock:		used for hardware locking
  * @ctx:		array of driver contexts
  * @curr_ctx:		number of the currently running context
  * @ctx_work_bits:	used to mark which contexts are waiting for hardware
  * @watchdog_work:	worker for the watchdog
- * @enter_suspend:	flag set when entering suspend
  * @ctx_buf:		common context memory (MFCv6)
  * @warn_start:		hardware error code from which warnings start
  * @mfc_ops:		ops structure holding HW operation function pointers
@@ -314,12 +312,11 @@ struct s5p_mfc_dev {
 	unsigned long *mem_bitmap;
 	void *mem_virt;
 	dma_addr_t dma_base[BANK_CTX_NUM];
-	unsigned long hw_lock;
+	unsigned long flags;
 	struct s5p_mfc_ctx *ctx[MFC_NUM_CONTEXTS];
 	int curr_ctx;
 	unsigned long ctx_work_bits;
 	struct delayed_work watchdog_work;
-	unsigned long enter_suspend;
 
 	struct s5p_mfc_priv_buf ctx_buf;
 	int warn_start;
@@ -329,6 +326,52 @@ struct s5p_mfc_dev {
 	bool fw_get_done;
 	bool risc_on; /* indicates if RISC is on or off */
 };
+
+/** enum s5p_mfc_dev_flags - helper flags for tracking driver state
+ * @S5P_MFC_DEV_HW_LOCKED:	used for hardware locking
+ * @S5P_MFC_DEV_SUSPENDED:	flag set when entering suspend
+ */
+enum s5p_mfc_dev_flags {
+	S5P_MFC_DEV_HW_LOCKED,
+	S5P_MFC_DEV_SUSPENDED,
+};
+
+static inline int s5p_mfc_hw_trylock(struct s5p_mfc_dev *dev)
+{
+	if (test_and_set_bit(S5P_MFC_DEV_HW_LOCKED, &dev->flags))
+		return -EBUSY;
+	return 0;
+}
+
+static inline int __s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev)
+{
+	return test_and_clear_bit(S5P_MFC_DEV_HW_LOCKED, &dev->flags);
+}
+
+static inline void s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev)
+{
+	WARN_ON(!__s5p_mfc_hw_unlock(dev));
+}
+
+static inline bool s5p_mfc_hw_is_locked(struct s5p_mfc_dev *dev)
+{
+	return test_bit(S5P_MFC_DEV_HW_LOCKED, &dev->flags);
+}
+
+static inline void s5p_mfc_set_suspended(struct s5p_mfc_dev *dev)
+{
+	set_bit(S5P_MFC_DEV_SUSPENDED, &dev->flags);
+}
+
+static inline void s5p_mfc_clear_suspended(struct s5p_mfc_dev *dev)
+{
+	clear_bit(S5P_MFC_DEV_SUSPENDED, &dev->flags);
+}
+
+static inline bool s5p_mfc_is_suspended(struct s5p_mfc_dev *dev)
+{
+	return test_bit(S5P_MFC_DEV_SUSPENDED, &dev->flags);
+}
 
 /**
  * struct s5p_mfc_h264_enc_params - encoding parameters for h264

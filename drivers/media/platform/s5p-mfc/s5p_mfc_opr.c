@@ -22,28 +22,6 @@
 
 static struct s5p_mfc_hw_ops *s5p_mfc_ops;
 
-int s5p_mfc_hw_trylock(struct s5p_mfc_dev *dev)
-{
-	if (test_and_set_bit(0, &dev->hw_lock))
-		return -EBUSY;
-	return 0;
-}
-
-int __s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev)
-{
-	return test_and_clear_bit(0, &dev->hw_lock);
-}
-
-void s5p_mfc_hw_unlock(struct s5p_mfc_dev *dev)
-{
-	WARN_ON(!__s5p_mfc_hw_unlock(dev));
-}
-
-bool s5p_mfc_hw_is_locked(struct s5p_mfc_dev *dev)
-{
-	return test_bit(0, &dev->hw_lock);
-}
-
 void s5p_mfc_init_hw_ops(struct s5p_mfc_dev *dev)
 {
 	if (IS_MFCV6_PLUS(dev)) {
@@ -418,7 +396,7 @@ static int s5p_mfc_try_run_once(struct s5p_mfc_dev *dev)
 
 	mfc_debug(1, "Try run dev: %p\n", dev);
 
-	if (test_bit(0, &dev->enter_suspend)) {
+	if (s5p_mfc_is_suspended(dev)) {
 		mfc_debug(1, "Entering suspend so do not schedule any jobs\n");
 		return 0;
 	}
